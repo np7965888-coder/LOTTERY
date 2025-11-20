@@ -1,0 +1,671 @@
+// Google Apps Script 代碼
+// 用於抽獎系統的 Web App API
+// 請將此代碼貼到 Google Apps Script 編輯器中
+
+// 設定：Google 試算表名稱
+const SPREADSHEET_NAME = 'LOTTERY';
+
+// 工作表名稱
+const SHEET_PARTICIPANTS = 'participants';
+const SHEET_PRIZES = 'prizes';
+const SHEET_WINNERS = 'winners';
+
+/**
+ * 取得試算表物件
+ * 支援兩種方式：
+ * 1. 如果是在試算表中建立的腳本，使用 getActiveSpreadsheet()
+ * 2. 如果是獨立的 Apps Script 專案，使用 openByName()
+ */
+function getSpreadsheet() {
+  // 先嘗試取得當前活躍的試算表（適用於在試算表中建立的腳本）
+  let ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 如果沒有活躍的試算表，嘗試用名稱開啟（適用於獨立的 Apps Script 專案）
+  if (!ss) {
+    try {
+      ss = SpreadsheetApp.openByName(SPREADSHEET_NAME);
+    } catch (e) {
+      throw new Error('找不到試算表 "' + SPREADSHEET_NAME + '"。請確認：\n1. 試算表名稱是否正確\n2. 試算表是否已與 Apps Script 專案連結\n3. 是否有存取權限');
+    }
+  }
+  
+  return ss;
+}
+
+/**
+ * 取得工作表
+ */
+function getSheet(sheetName) {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    // 如果工作表不存在，建立它
+    sheet = ss.insertSheet(sheetName);
+        // 根據工作表類型設定標題列
+        if (sheetName === SHEET_PARTICIPANTS) {
+          sheet.getRange(1, 1, 1, 8).setValues([['id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes']]);
+          // 設定 id 欄位為文字格式（保留前導零）
+          sheet.getRange(2, 1, 1000, 1).setNumberFormat('@');
+    } else if (sheetName === SHEET_PRIZES) {
+      sheet.getRange(1, 1, 1, 6).setValues([['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order']]);
+    } else if (sheetName === SHEET_WINNERS) {
+      sheet.getRange(1, 1, 1, 9).setValues([['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes']]);
+      // 設定 participant_id 欄位為文字格式（保留前導零）
+      sheet.getRange(2, 5, 1000, 1).setNumberFormat('@');
+    }
+  } else {
+    // 如果工作表已存在，確保 id 和 participant_id 欄位為文字格式
+    if (sheetName === SHEET_PARTICIPANTS) {
+      const lastRow = Math.max(sheet.getLastRow(), 1000);
+      if (lastRow > 1) {
+        sheet.getRange(2, 1, lastRow - 1, 1).setNumberFormat('@');
+      }
+    } else if (sheetName === SHEET_WINNERS) {
+      const lastRow = Math.max(sheet.getLastRow(), 1000);
+      if (lastRow > 1) {
+        sheet.getRange(2, 5, lastRow - 1, 1).setNumberFormat('@');
+      }
+    }
+  }
+  return sheet;
+}
+
+/**
+ * 將資料列轉換為物件
+ */
+function rowToObject(sheet, rowIndex, headers) {
+  const row = sheet.getRange(rowIndex, 1, 1, headers.length).getValues()[0];
+  const displayRow = sheet.getRange(rowIndex, 1, 1, headers.length).getDisplayValues()[0];
+  const obj = {};
+  headers.forEach((header, index) => {
+    // 對於 id 和 participant_id 欄位，使用顯示值以保留前導零
+    if (header === 'id' || header === 'participant_id') {
+      obj[header] = displayRow[index] || '';
+    } else {
+      obj[header] = row[index] || '';
+    }
+  });
+  return obj;
+}
+
+/**
+ * 將物件轉換為資料列
+ */
+function objectToRow(obj, headers) {
+  return headers.map(header => obj[header] || '');
+}
+
+/**
+ * 處理 POST 請求
+ * 支援 JSON 和表單資料兩種格式
+ */
+function doPost(e) {
+  let result;
+  
+  try {
+    let requestData = {};
+    let action = '';
+    
+    // 判斷請求格式：JSON 或表單資料
+    if (e.postData && e.postData.contents) {
+      try {
+        // 嘗試解析為 JSON
+        requestData = JSON.parse(e.postData.contents);
+        action = requestData.action || '';
+      } catch (jsonError) {
+        // 如果不是 JSON，嘗試解析為表單資料
+        if (e.parameter) {
+          action = e.parameter.action || '';
+          // 處理表單資料參數
+          Object.keys(e.parameter).forEach(function(key) {
+            const value = e.parameter[key];
+            // 嘗試解析 JSON 字串
+            try {
+              requestData[key] = JSON.parse(value);
+            } catch (parseErr) {
+              requestData[key] = value;
+            }
+          });
+        }
+      }
+    } else if (e.parameter) {
+      // 純表單資料
+      action = e.parameter.action || '';
+      
+      Object.keys(e.parameter).forEach(function(key) {
+        const value = e.parameter[key];
+        try {
+          requestData[key] = JSON.parse(value);
+        } catch (parseErr) {
+          requestData[key] = value;
+        }
+      });
+    }
+    
+    if (!action || action === '') {
+      result = {
+        error: '缺少 action 參數',
+        success: false
+      };
+    } else {
+      // 根據 action 執行對應的處理函式
+      switch (action) {
+        case 'getParticipants':
+          result = handleGetParticipants();
+          break;
+        case 'getPrizes':
+          result = handleGetPrizes();
+          break;
+        case 'getWinners':
+          result = handleGetWinners();
+          break;
+        case 'checkIn':
+          result = handleCheckIn(requestData);
+          break;
+        case 'appendWinner':
+          result = handleAppendWinner(requestData);
+          break;
+        case 'appendWinners':
+          result = handleAppendWinners(requestData);
+          break;
+        case 'removeWinner':
+          result = handleRemoveWinner(requestData);
+          break;
+        case 'updateParticipant':
+          result = handleUpdateParticipant(requestData);
+          break;
+        case 'importParticipants':
+          result = handleImportParticipants(requestData);
+          break;
+        case 'updatePrize':
+          result = handleUpdatePrize(requestData);
+          break;
+        case 'exportWinners':
+          result = handleExportWinners();
+          break;
+        default:
+          result = {
+            error: '未知的 action: ' + action,
+            success: false
+          };
+      }
+    }
+    
+    // 確保 result 不是 undefined
+    if (!result) {
+      result = {
+        error: '處理函式未返回結果',
+        success: false
+      };
+    }
+    
+    // 確保返回的是物件
+    if (typeof result !== 'object') {
+      result = {
+        error: '回應格式錯誤',
+        success: false,
+        rawResult: String(result)
+      };
+    }
+    
+    // 記錄結果（用於除錯，可在 Apps Script 執行記錄中查看）
+    try {
+      Logger.log('Action: ' + action);
+      Logger.log('Result: ' + JSON.stringify(result));
+    } catch (logErr) {
+      // 忽略日誌錯誤
+    }
+    
+    // 返回 JSON 回應
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (error) {
+    // 記錄錯誤
+    try {
+      Logger.log('Error: ' + error.toString());
+      Logger.log('Stack: ' + error.stack);
+    } catch (logErr) {
+      // 忽略日誌錯誤
+    }
+    
+    // 返回錯誤回應
+    result = {
+      error: error.message || error.toString() || '發生未知錯誤',
+      success: false
+    };
+    
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * 取得參與者名單
+ */
+function handleGetParticipants() {
+  const sheet = getSheet(SHEET_PARTICIPANTS);
+  const headers = ['id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes'];
+  const lastRow = sheet.getLastRow();
+  
+  if (lastRow <= 1) {
+    return { success: true, data: [] };
+  }
+  
+  const data = [];
+  for (let i = 2; i <= lastRow; i++) {
+    const obj = rowToObject(sheet, i, headers);
+    // 移除 password 欄位（安全考量，不返回密碼）
+    delete obj.password;
+    // 轉換資料類型
+    obj.checked_in = obj.checked_in ? Number(obj.checked_in) : 0;
+    obj.won = obj.won === 'TRUE' || obj.won === true;
+    data.push(obj);
+  }
+  
+  return { success: true, data: data };
+}
+
+/**
+ * 取得獎項列表
+ */
+function handleGetPrizes() {
+  const sheet = getSheet(SHEET_PRIZES);
+  const headers = ['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order'];
+  const lastRow = sheet.getLastRow();
+  
+  if (lastRow <= 1) {
+    return { success: true, data: [] };
+  }
+  
+  const data = [];
+  for (let i = 2; i <= lastRow; i++) {
+    const obj = rowToObject(sheet, i, headers);
+    // 轉換資料類型
+    obj.quantity = obj.quantity ? Number(obj.quantity) : 0;
+    obj.order = obj.order ? Number(obj.order) : 0;
+    data.push(obj);
+  }
+  
+  return { success: true, data: data };
+}
+
+/**
+ * 取得中獎紀錄
+ */
+function handleGetWinners() {
+  const sheet = getSheet(SHEET_WINNERS);
+  const headers = ['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes'];
+  const lastRow = sheet.getLastRow();
+  
+  if (lastRow <= 1) {
+    return { success: true, data: [] };
+  }
+  
+  const data = [];
+  for (let i = 2; i <= lastRow; i++) {
+    const obj = rowToObject(sheet, i, headers);
+    // 轉換資料類型
+    obj.claimed = obj.claimed === 'TRUE' || obj.claimed === true;
+    data.push(obj);
+  }
+  
+  return { success: true, data: data };
+}
+
+/**
+ * 報到
+ */
+function handleCheckIn(requestData) {
+  const participantId = requestData.participantId;
+  const password = requestData.password;
+  
+  if (!participantId || !password) {
+    throw new Error('缺少必要參數：工號和密碼');
+  }
+  
+  const sheet = getSheet(SHEET_PARTICIPANTS);
+  const headers = ['id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes'];
+  const lastRow = sheet.getLastRow();
+  
+  // 檢查是否有資料（lastRow = 1 表示只有標題列）
+  if (lastRow <= 1) {
+    throw new Error('試算表中沒有參與者資料，請先匯入參與者名單');
+  }
+  
+  // 尋找參與者
+  let found = false;
+  let participantName = '';
+  let participantPassword = '';
+  let participantRow = -1;
+  
+  // 從第2列開始搜尋（第1列是標題）
+  for (let i = 2; i <= lastRow; i++) {
+    // 使用顯示值以保留前導零
+    const rowId = sheet.getRange(i, 1).getDisplayValue();
+    const rowIdStr = String(rowId || '').trim();
+    const inputIdStr = String(participantId || '').trim();
+    
+    // 比對工號（忽略大小寫和空白）
+    if (rowIdStr === inputIdStr) {
+      found = true;
+      participantRow = i;
+      participantName = sheet.getRange(i, 2).getValue(); // name (第2欄)
+      participantPassword = sheet.getRange(i, 4).getValue(); // password (第4欄)
+      break;
+    }
+  }
+  
+  // 如果找不到參與者，立即拋出錯誤
+  if (!found) {
+    throw new Error(`找不到工號「${participantId}」的參與者，請確認工號是否正確`);
+  }
+  
+  // 檢查 name 是否為空
+  if (!participantName || participantName.toString().trim() === '') {
+    throw new Error('參與者資料不完整，姓名欄位為空');
+  }
+  
+  // 驗證密碼
+  if (!password || password.trim() === '') {
+    throw new Error('密碼不能為空');
+  }
+  
+  // 比對密碼（從試算表讀取的密碼）
+  const storedPassword = String(participantPassword || '').trim();
+  const inputPassword = String(password).trim();
+  
+  if (storedPassword !== inputPassword) {
+    throw new Error('密碼錯誤，請確認密碼是否正確');
+  }
+  
+  // 檢查是否已經報到
+  const checkedIn = sheet.getRange(participantRow, 5).getValue(); // checked_in (第5欄)
+  if (checkedIn == 1) {
+    // 已經報到過，仍然返回成功，但提示已報到
+    return {
+      success: true,
+      name: participantName,
+      message: '您已經報到過了',
+      alreadyCheckedIn: true
+    };
+  }
+  
+  // 更新報到狀態
+  sheet.getRange(participantRow, 5).setValue(1); // checked_in = 1 (第5欄)
+  sheet.getRange(participantRow, 7).setValue(new Date().toISOString()); // checked_date (第7欄)
+  
+  return {
+    success: true,
+    name: participantName.toString().trim(),
+    message: '報到成功'
+  };
+}
+
+/**
+ * 新增中獎紀錄
+ */
+function handleAppendWinner(requestData) {
+  const winnerData = {
+    timestamp: new Date().toISOString(),
+    prize_id: requestData.prize_id || '',
+    prize_title: requestData.prize_title || '',
+    prize_name: requestData.prize_name || '',
+    participant_id: requestData.participant_id || '',
+    participant_name: requestData.participant_name || '',
+    admin: requestData.admin || 'system',
+    claimed: requestData.claimed || false,
+    notes: requestData.notes || ''
+  };
+  
+  const sheet = getSheet(SHEET_WINNERS);
+  const headers = ['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes'];
+  
+  // 取得下一列
+  const nextRow = sheet.getLastRow() + 1;
+  
+  // 寫入資料
+  const rowData = objectToRow(winnerData, headers);
+  sheet.getRange(nextRow, 1, 1, headers.length).setValues([rowData]);
+  
+  // 確保 participant_id 欄位以文字格式儲存（保留前導零）
+  const participantIdCol = headers.indexOf('participant_id') + 1;
+  sheet.getRange(nextRow, participantIdCol).setNumberFormat('@'); // @ 表示文字格式
+  // 重新寫入 participant_id 以確保保留前導零
+  const participantIdValue = String(winnerData.participant_id || '');
+  sheet.getRange(nextRow, participantIdCol).setValue(participantIdValue);
+  
+  // 同時更新參與者的 won 狀態
+  const participantsSheet = getSheet(SHEET_PARTICIPANTS);
+  const lastRow = participantsSheet.getLastRow();
+  const participantIdStr = String(winnerData.participant_id || '');
+  for (let i = 2; i <= lastRow; i++) {
+      // 使用顯示值以保留前導零
+      const rowId = String(participantsSheet.getRange(i, 1).getDisplayValue());
+      if (rowId === participantIdStr) {
+        participantsSheet.getRange(i, 6).setValue('TRUE'); // won = TRUE (第6欄)
+        break;
+      }
+  }
+  
+  return { success: true, message: '中獎紀錄已新增' };
+}
+
+/**
+ * 批次新增中獎紀錄（優化性能）
+ */
+function handleAppendWinners(requestData) {
+  const winnersList = requestData.winners || [];
+  
+  if (!Array.isArray(winnersList) || winnersList.length === 0) {
+    return { success: false, error: '缺少 winners 陣列或陣列為空' };
+  }
+  
+  const sheet = getSheet(SHEET_WINNERS);
+  const headers = ['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes'];
+  
+  // 準備批次寫入的資料
+  const rowsData = [];
+  const participantIdsToUpdate = new Set();
+  
+  const now = new Date().toISOString();
+  winnersList.forEach(winnerData => {
+    const winner = {
+      timestamp: now,
+      prize_id: winnerData.prize_id || '',
+      prize_title: winnerData.prize_title || '',
+      prize_name: winnerData.prize_name || '',
+      participant_id: winnerData.participant_id || '',
+      participant_name: winnerData.participant_name || '',
+      admin: winnerData.admin || 'system',
+      claimed: winnerData.claimed || false,
+      notes: winnerData.notes || ''
+    };
+    
+    rowsData.push(objectToRow(winner, headers));
+    participantIdsToUpdate.add(String(winner.participant_id));
+  });
+  
+  // 批次寫入所有中獎紀錄
+  if (rowsData.length > 0) {
+    const nextRow = sheet.getLastRow() + 1;
+    sheet.getRange(nextRow, 1, rowsData.length, headers.length).setValues(rowsData);
+    
+    // 確保 participant_id 欄位以文字格式儲存（保留前導零）
+    const participantIdCol = headers.indexOf('participant_id') + 1;
+    sheet.getRange(nextRow, participantIdCol, rowsData.length, 1).setNumberFormat('@'); // @ 表示文字格式
+    // 重新寫入所有 participant_id 以確保保留前導零
+    for (let i = 0; i < rowsData.length; i++) {
+      const participantIdValue = String(winnersList[i].participant_id || '');
+      sheet.getRange(nextRow + i, participantIdCol).setValue(participantIdValue);
+    }
+  }
+  
+  // 批次更新參與者的 won 狀態
+  const participantsSheet = getSheet(SHEET_PARTICIPANTS);
+  const lastRow = participantsSheet.getLastRow();
+  for (let i = 2; i <= lastRow; i++) {
+    // 使用顯示值以保留前導零
+    const rowId = String(participantsSheet.getRange(i, 1).getDisplayValue());
+    if (participantIdsToUpdate.has(rowId)) {
+      participantsSheet.getRange(i, 6).setValue('TRUE'); // won = TRUE (第6欄)
+      participantIdsToUpdate.delete(rowId);
+      // 如果所有參與者都已更新，提前結束
+      if (participantIdsToUpdate.size === 0) {
+        break;
+      }
+    }
+  }
+  
+  return { success: true, message: `已批次新增 ${rowsData.length} 筆中獎紀錄` };
+}
+
+/**
+ * 移除中獎紀錄（重抽）
+ */
+function handleRemoveWinner(requestData) {
+  const participantId = requestData.winnerId || requestData.participant_id;
+  const timestamp = requestData.timestamp;
+  
+  if (!participantId || !timestamp) {
+    throw new Error('缺少必要參數');
+  }
+  
+  const sheet = getSheet(SHEET_WINNERS);
+  const lastRow = sheet.getLastRow();
+  
+  // 尋找並刪除對應的紀錄
+  const participantIdStr = String(participantId || '');
+  for (let i = lastRow; i >= 2; i--) {
+    // 使用顯示值以保留前導零
+    const rowParticipantId = String(sheet.getRange(i, 5).getDisplayValue()); // participant_id
+    const rowTimestamp = sheet.getRange(i, 1).getValue(); // timestamp
+    
+    if (rowParticipantId === participantIdStr && 
+        String(rowTimestamp) === String(timestamp)) {
+      sheet.deleteRow(i);
+      
+      // 更新參與者的 won 狀態
+      const participantsSheet = getSheet(SHEET_PARTICIPANTS);
+      const pLastRow = participantsSheet.getLastRow();
+      for (let j = 2; j <= pLastRow; j++) {
+        // 使用顯示值以保留前導零
+        const rowId = String(participantsSheet.getRange(j, 1).getDisplayValue());
+        if (rowId === participantIdStr) {
+          participantsSheet.getRange(j, 6).setValue('FALSE'); // won = FALSE (第6欄)
+          break;
+        }
+      }
+      
+      return { success: true, message: '中獎紀錄已移除' };
+    }
+  }
+  
+  throw new Error('找不到對應的中獎紀錄');
+}
+
+/**
+ * 更新參與者狀態
+ */
+function handleUpdateParticipant(requestData) {
+  const participantId = requestData.participantId;
+  const updates = requestData.updates || {};
+  
+  if (!participantId) {
+    throw new Error('缺少必要參數');
+  }
+  
+  const sheet = getSheet(SHEET_PARTICIPANTS);
+  const headers = ['id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes'];
+  const lastRow = sheet.getLastRow();
+  
+  // 尋找參與者
+  const participantIdStr = String(participantId || '');
+  for (let i = 2; i <= lastRow; i++) {
+    // 使用顯示值以保留前導零
+    const rowId = String(sheet.getRange(i, 1).getDisplayValue());
+    if (rowId === participantIdStr) {
+      // 更新欄位
+      Object.keys(updates).forEach(key => {
+        const colIndex = headers.indexOf(key) + 1;
+        if (colIndex > 0) {
+          sheet.getRange(i, colIndex).setValue(updates[key]);
+        }
+      });
+      
+      return { success: true, message: '參與者資料已更新' };
+    }
+  }
+  
+  throw new Error('找不到參與者');
+}
+
+/**
+ * 匯入名單
+ */
+function handleImportParticipants(requestData) {
+  const participants = requestData.participants || [];
+  
+  if (!Array.isArray(participants) || participants.length === 0) {
+    throw new Error('無效的參與者資料');
+  }
+  
+  const sheet = getSheet(SHEET_PARTICIPANTS);
+  const headers = ['id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes'];
+  
+  // 清除現有資料（保留標題列）
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.deleteRows(2, lastRow - 1);
+  }
+  
+  // 寫入新資料
+  const rows = participants.map(p => objectToRow(p, headers));
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  }
+  
+  return { success: true, message: `已匯入 ${participants.length} 筆參與者資料` };
+}
+
+/**
+ * 更新獎項
+ */
+function handleUpdatePrize(requestData) {
+  const prizeId = requestData.prizeId;
+  const updates = requestData.updates || {};
+  
+  if (!prizeId) {
+    throw new Error('缺少必要參數');
+  }
+  
+  const sheet = getSheet(SHEET_PRIZES);
+  const headers = ['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order'];
+  const lastRow = sheet.getLastRow();
+  
+  // 尋找獎項
+  for (let i = 2; i <= lastRow; i++) {
+    const rowPrizeId = sheet.getRange(i, 1).getValue();
+    if (String(rowPrizeId) === String(prizeId)) {
+      // 更新欄位
+      Object.keys(updates).forEach(key => {
+        const colIndex = headers.indexOf(key) + 1;
+        if (colIndex > 0) {
+          sheet.getRange(i, colIndex).setValue(updates[key]);
+        }
+      });
+      
+      return { success: true, message: '獎項資料已更新' };
+    }
+  }
+  
+  throw new Error('找不到獎項');
+}
+
+/**
+ * 匯出中獎名單
+ */
+function handleExportWinners() {
+  return handleGetWinners(); // 直接返回中獎紀錄
+}
+

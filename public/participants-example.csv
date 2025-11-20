@@ -1,0 +1,9 @@
+id,name,department,password,checked_in,won,checked_date,notes
+02212,黃中豪,資訊部,3091,0,FALSE,,
+E001,張三,資訊部,1234,0,FALSE,,
+E002,李四,人事部,5678,0,FALSE,,
+E003,王五,財務部,9012,0,FALSE,,
+E004,趙六,業務部,3456,0,FALSE,,
+E005,錢七,行銷部,7890,0,FALSE,,
+
+
