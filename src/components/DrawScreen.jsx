@@ -94,6 +94,9 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
 
   const getRemaining = (prize) => {
     if (!prize) return 0;
+    if (Number(prize.quantity) === 0) {
+      return Number.POSITIVE_INFINITY;
+    }
     const used = winnersByPrize[prize.prize_id] || 0;
     return Math.max(prize.quantity - used, 0);
   };
@@ -105,8 +108,10 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
   const currentPrizeRemaining = getRemaining(currentPrize);
   const prizeMode = currentPrize?.mode || 'single';
   const isBatchMode = prizeMode === 'batch';
+  const isSinglePrize = prizeMode === 'single';
+  const isUnlimitedQuantity = currentPrize?.quantity === 0;
   const maxBatchCount = currentPrize ? (isBatchMode ? Math.max(currentPrizeRemaining, 1) : 1) : 1;
-  const canDraw = !!currentPrize && currentPrizeRemaining > 0 && !isDrawing && (!isBatchMode || batchCount > 0);
+  const canDraw = !!currentPrize && (isUnlimitedQuantity || currentPrizeRemaining > 0) && !isDrawing && (!isBatchMode || batchCount > 0);
   const noPrizes = sortedPrizes.length === 0;
 
   useEffect(() => {
@@ -447,7 +452,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
       return;
     }
     const remaining = getRemaining(currentPrize);
-    if (remaining === 0) {
+    if (!isFinite(remaining) || remaining === 0) {
       setBatchCount(1);
     } else {
       // 自動設為該獎項的最大剩餘數量
@@ -970,9 +975,9 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                             filter: 'drop-shadow(0 0 4px rgba(251, 192, 45, 0.4))',
                           }}
                         >
-                          {currentPrize.quantity} 名
+                          {currentPrize.quantity === 0 ? '無上限' : `${currentPrize.quantity} 名`}
                         </div>
-                        {currentPrizeRemaining === 0 && (
+                        {!isUnlimitedQuantity && currentPrizeRemaining === 0 && (
                           <div className="text-2xl text-red-400 mt-4 font-semibold">
                             ⚠️ 此獎項已抽完，請切換其他獎項
                           </div>
@@ -1051,7 +1056,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                       }
                     }}
                   >
-                    {canDraw ? '🎉 開始抽獎 🎉' : currentPrizeRemaining === 0 ? '本獎項已抽完' : '請選擇獎項'}
+                    {canDraw ? '🎉 開始抽獎 🎉' : (!isUnlimitedQuantity && currentPrizeRemaining === 0) ? '本獎項已抽完' : '請選擇獎項'}
                   </button>
                 </div>
               </div>
@@ -1095,10 +1100,30 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                 {/* 根據 checked_in 狀態顯示不同顏色 */}
                 {currentWinner.checked_in === 2 || currentWinner.checked_in === 9 ? (
                   <>
-                    <div className="text-7xl font-bold text-white mb-6 drop-shadow-lg">
+                    <div
+                      className="text-7xl font-bold text-white mb-6 drop-shadow-lg rounded-lg p-8"
+                      style={{
+                        border: isSinglePrize ? '4px solid #FBC02D' : '4px solid rgba(255, 255, 255, 0.25)',
+                        background: 'linear-gradient(135deg, rgba(13, 25, 45, 0.8), rgba(20, 40, 70, 0.6))',
+                        boxShadow: `
+                          0 0 35px rgba(59, 130, 246, 0.4),
+                          0 8px 32px rgba(0, 0, 0, 0.6)
+                        `
+                      }}
+                    >
                       {currentWinner.name}
                     </div>
-                    <div className="text-2xl font-bold text-blue-200 mb-4 bg-blue-800/60 rounded-lg p-4 border border-blue-600/50">
+                    <div
+                      className="text-2xl font-bold text-blue-200 mb-4 rounded-lg p-4 border"
+                      style={{
+                        border: '3px solid rgba(59, 130, 246, 0.5)',
+                        background: 'linear-gradient(135deg, rgba(29, 78, 216, 0.55), rgba(37, 99, 235, 0.45))',
+                        boxShadow: `
+                          0 0 25px rgba(59, 130, 246, 0.4),
+                          inset 0 0 20px rgba(59, 130, 246, 0.25)
+                        `
+                      }}
+                    >
                       ⚠️ 不需上台領獎
                       {currentWinner.checked_in === 2 ? '（公差無法到場）' : '（因公未到）'}
                     </div>
@@ -1108,35 +1133,16 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                     className="text-7xl font-bold mb-6 rounded-lg p-8"
                     style={{
                       color: '#FBC02D',
-                      background: !isBatchMode
-                        ? 'linear-gradient(135deg, rgba(251, 192, 45, 0.25), rgba(255, 215, 0, 0.2))'
-                        : 'linear-gradient(135deg, rgba(251, 192, 45, 0.15), rgba(255, 215, 0, 0.1))',
-                      border: !isBatchMode ? '6px solid #FBC02D' : '4px solid #FBC02D',
-                      boxShadow: !isBatchMode
-                        ? `
-                          0 0 60px rgba(251, 192, 45, 1),
-                          0 0 100px rgba(251, 192, 45, 0.8),
-                          0 0 140px rgba(251, 192, 45, 0.6),
-                          0 0 180px rgba(251, 192, 45, 0.4),
-                          inset 0 0 40px rgba(251, 192, 45, 0.3),
-                          inset 0 0 80px rgba(255, 215, 0, 0.15),
-                          0 8px 32px rgba(0, 0, 0, 0.8),
-                          0 0 0 2px rgba(255, 215, 0, 0.5)
-                        `
-                        : `
-                          0 0 40px rgba(251, 192, 45, 0.8),
-                          0 0 80px rgba(251, 192, 45, 0.5),
-                          0 0 120px rgba(251, 192, 45, 0.3),
-                          0 0 160px rgba(251, 192, 45, 0.15),
-                          inset 0 0 30px rgba(251, 192, 45, 0.2),
-                          0 8px 32px rgba(0, 0, 0, 0.6)
-                        `,
-                      textShadow: !isBatchMode
-                        ? '0 4px 20px rgba(0, 0, 0, 1), 0 0 30px rgba(251, 192, 45, 0.8), 0 0 50px rgba(251, 192, 45, 0.6), 0 0 70px rgba(255, 215, 0, 0.4)'
-                        : '0 4px 16px rgba(0, 0, 0, 0.8), 0 0 24px rgba(251, 192, 45, 0.6), 0 0 40px rgba(251, 192, 45, 0.4)',
-                      filter: !isBatchMode
-                        ? 'drop-shadow(0 0 16px rgba(251, 192, 45, 0.8)) drop-shadow(0 0 24px rgba(255, 215, 0, 0.6))'
-                        : 'drop-shadow(0 0 12px rgba(251, 192, 45, 0.6))',
+                      background: 'linear-gradient(135deg, rgba(251, 192, 45, 0.18), rgba(255, 215, 0, 0.12))',
+                      border: isSinglePrize ? '4px solid #FBC02D' : '4px solid rgba(255, 255, 255, 0.25)',
+                      boxShadow: `
+                        0 0 40px rgba(251, 192, 45, 0.8),
+                        0 0 80px rgba(251, 192, 45, 0.5),
+                        inset 0 0 25px rgba(251, 192, 45, 0.2),
+                        0 8px 32px rgba(0, 0, 0, 0.6)
+                      `,
+                      textShadow: '0 4px 16px rgba(0, 0, 0, 0.8), 0 0 24px rgba(251, 192, 45, 0.6), 0 0 40px rgba(251, 192, 45, 0.4)',
+                      filter: 'drop-shadow(0 0 12px rgba(251, 192, 45, 0.6))',
                     }}
                   >
                     {currentWinner.name}

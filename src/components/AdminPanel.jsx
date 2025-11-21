@@ -163,7 +163,7 @@ export default function AdminPanel() {
                   }`}
                 >
                   {tab === 'participants' ? '參與者名單' : 
-                   tab === 'prizes' ? '獎項管理' : 
+                   tab === 'prizes' ? '獎項清單' : 
                    tab === 'winners' ? '中獎紀錄' : 
                    '機率測試'}
                 </button>
@@ -277,7 +277,9 @@ export default function AdminPanel() {
                     <tr key={idx}>
                       <td className="px-6 py-4 whitespace-nowrap">{prize.prize_title}</td>
                       <td className="px-6 py-4 whitespace-nowrap">{prize.prize_name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">{prize.quantity}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {Number(prize.quantity) === 0 ? '無上限' : prize.quantity}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">{prize.order}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {prize.mode === 'batch' ? '批次' : '單筆'}
