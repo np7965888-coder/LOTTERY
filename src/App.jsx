@@ -24,6 +24,7 @@ function App() {
     return 'checkin';
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isNavHovered, setIsNavHovered] = useState(false);
 
   const handleCheckInSuccess = () => {
     // 報到成功後的處理（可選）
@@ -95,34 +96,44 @@ function App() {
   return (
     <div className="App">
       {showNavigation && (
-        <nav className="bg-gray-800 text-white p-4">
-          <div className="max-w-7xl mx-auto flex gap-4">
-            <button
-              onClick={() => safeSetCurrentPage('checkin')}
-              className={`px-4 py-2 rounded ${
-                effectivePage === 'checkin' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
-              }`}
-            >
-              報到
-            </button>
-            <button
-              onClick={() => safeSetCurrentPage('draw')}
-              className={`px-4 py-2 rounded ${
-                effectivePage === 'draw' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
-              }`}
-            >
-              抽獎
-            </button>
-            <button
-              onClick={() => safeSetCurrentPage('admin')}
-              className={`px-4 py-2 rounded ${
-                effectivePage === 'admin' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
-              }`}
-            >
-              管理後台
-            </button>
-          </div>
-        </nav>
+        <div
+          className="fixed top-0 left-0 right-0 z-30 flex justify-center"
+          onMouseEnter={() => setIsNavHovered(true)}
+          onMouseLeave={() => setIsNavHovered(false)}
+        >
+          <nav
+            className={`bg-gray-800/95 text-white p-4 rounded-b-2xl shadow-lg transition-all duration-300 pointer-events-none opacity-0 -translate-y-6 ${
+              isNavHovered ? 'opacity-100 translate-y-0 pointer-events-auto' : ''
+            }`}
+          >
+            <div className="flex gap-4">
+              <button
+                onClick={() => safeSetCurrentPage('checkin')}
+                className={`px-4 py-2 rounded ${
+                  effectivePage === 'checkin' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+              >
+                報到
+              </button>
+              <button
+                onClick={() => safeSetCurrentPage('draw')}
+                className={`px-4 py-2 rounded ${
+                  effectivePage === 'draw' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+              >
+                抽獎
+              </button>
+              <button
+                onClick={() => safeSetCurrentPage('admin')}
+                className={`px-4 py-2 rounded ${
+                  effectivePage === 'admin' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+              >
+                管理後台
+              </button>
+            </div>
+          </nav>
+        </div>
       )}
 
       {effectivePage === 'checkin' && (

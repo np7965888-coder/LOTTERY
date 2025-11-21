@@ -269,6 +269,7 @@ export default function AdminPanel() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">獎品名稱</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">數量</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">順序</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">模式</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -278,6 +279,9 @@ export default function AdminPanel() {
                       <td className="px-6 py-4 whitespace-nowrap">{prize.prize_name}</td>
                       <td className="px-6 py-4 whitespace-nowrap">{prize.quantity}</td>
                       <td className="px-6 py-4 whitespace-nowrap">{prize.order}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {prize.mode === 'batch' ? '批次' : '單筆'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

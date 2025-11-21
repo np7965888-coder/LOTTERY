@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Google Apps Script 代碼
 // 用於抽獎系統的 Web App API
 // 請將此代碼貼到 Google Apps Script 編輯器中
@@ -9,7 +10,11 @@ const SPREADSHEET_NAME = 'LOTTERY';
 const SHEET_PARTICIPANTS = 'participants';
 const SHEET_PRIZES = 'prizes';
 const SHEET_WINNERS = 'winners';
+const SHEET_SETTINGS = 'settings';
 
+const DEFAULT_SETTINGS = {
+  checkin_deadline: ''
+};
 /**
  * 取得試算表物件
  * 支援兩種方式：
@@ -47,11 +52,13 @@ function getSheet(sheetName) {
           // 設定 id 欄位為文字格式（保留前導零）
           sheet.getRange(2, 1, 1000, 1).setNumberFormat('@');
     } else if (sheetName === SHEET_PRIZES) {
-      sheet.getRange(1, 1, 1, 6).setValues([['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order']]);
+      sheet.getRange(1, 1, 1, 7).setValues([['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order', 'mode']]);
     } else if (sheetName === SHEET_WINNERS) {
       sheet.getRange(1, 1, 1, 9).setValues([['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes']]);
       // 設定 participant_id 欄位為文字格式（保留前導零）
       sheet.getRange(2, 5, 1000, 1).setNumberFormat('@');
+    } else if (sheetName === SHEET_SETTINGS) {
+      sheet.getRange(1, 1, 1, 2).setValues([['key', 'value']]);
     }
   } else {
     // 如果工作表已存在，確保 id 和 participant_id 欄位為文字格式
@@ -93,6 +100,53 @@ function rowToObject(sheet, rowIndex, headers) {
  */
 function objectToRow(obj, headers) {
   return headers.map(header => obj[header] || '');
+}
+
+/**
+ * 共用 CORS 標頭設定
+ */
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type'
+};
+
+/**
+ * 處理預檢 (OPTIONS)
+ */
+function doOptions() {
+  return ContentService.createTextOutput('')
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
+/**
+ * GET 請求：方便測試用（支援 action=?）
+ * 例如：
+ *   https://script.google.com/macros/s/xxxx/exec?action=getParticipants
+ */
+function doGet(e) {
+  console.log('doGet parameters:', e);
+  const action = e?.parameter?.action;
+  console.log('action =', action);
+  let result;
+
+  try {
+    switch (action) {
+      case 'getParticipants': result = handleGetParticipants(); break;
+      case 'getPrizes': result = handleGetPrizes(); break;
+      case 'getWinners': result = handleGetWinners(); break;
+      case 'exportWinners': result = handleExportWinners(); break;
+      default:
+        result = { error: '未知的 action: ' + action };
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 /**
@@ -158,6 +212,12 @@ function doPost(e) {
           break;
         case 'getWinners':
           result = handleGetWinners();
+          break;
+        case 'getSettings':
+          result = handleGetSettings();
+          break;
+        case 'updateSettings':
+          result = handleUpdateSettings(requestData);
           break;
         case 'checkIn':
           result = handleCheckIn(requestData);
@@ -240,6 +300,101 @@ function doPost(e) {
   }
 }
 
+
+/**
+ * 讀取設定資料
+ */
+function getSettingsData() {
+  const sheet = getSheet(SHEET_SETTINGS);
+  if (sheet.getLastRow() < 1) {
+    sheet.getRange(1, 1, 1, 2).setValues([['key', 'value']]);
+  }
+
+  const settings = Object.assign({}, DEFAULT_SETTINGS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+    rows.forEach(row => {
+      const key = row[0];
+      if (key) {
+        settings[key] = row[1] || '';
+      }
+    });
+  }
+  return settings;
+}
+
+/**
+ * 儲存設定資料
+ */
+function saveSettings(updates = {}) {
+  const sheet = getSheet(SHEET_SETTINGS);
+  if (sheet.getLastRow() < 1) {
+    sheet.getRange(1, 1, 1, 2).setValues([['key', 'value']]);
+  }
+
+  const lastRow = sheet.getLastRow();
+  const existing = {};
+  if (lastRow > 1) {
+    const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+    rows.forEach((row, index) => {
+      const key = row[0];
+      if (key) {
+        existing[key] = {
+          row: index + 2,
+          value: row[1]
+        };
+      }
+    });
+  }
+
+  Object.keys(updates).forEach(key => {
+    const value = updates[key] === undefined || updates[key] === null ? '' : updates[key];
+    if (existing[key]) {
+      sheet.getRange(existing[key].row, 2).setValue(value);
+    } else {
+      sheet.appendRow([key, value]);
+    }
+  });
+}
+
+function handleGetSettings() {
+  return {
+    success: true,
+    data: getSettingsData()
+  };
+}
+
+function handleUpdateSettings(requestData) {
+  const updates = requestData.settings || {};
+  const allowedUpdates = {};
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'checkin_deadline')) {
+    const deadlineValue = updates.checkin_deadline;
+    let isoString = '';
+    if (deadlineValue) {
+      const deadlineDate = new Date(deadlineValue);
+      if (isNaN(deadlineDate.getTime())) {
+        throw new Error('報到截止時間格式不正確');
+      }
+      isoString = deadlineDate.toISOString();
+    }
+    allowedUpdates.checkin_deadline = isoString;
+  }
+
+  if (Object.keys(allowedUpdates).length === 0) {
+    throw new Error('沒有可更新的設定');
+  }
+
+  saveSettings(allowedUpdates);
+
+  return {
+    success: true,
+    data: getSettingsData(),
+    message: '設定已更新'
+  };
+}
+
 /**
  * 取得參與者名單
  */
@@ -255,8 +410,6 @@ function handleGetParticipants() {
   const data = [];
   for (let i = 2; i <= lastRow; i++) {
     const obj = rowToObject(sheet, i, headers);
-    // 移除 password 欄位（安全考量，不返回密碼）
-    delete obj.password;
     // 轉換資料類型
     obj.checked_in = obj.checked_in ? Number(obj.checked_in) : 0;
     obj.won = obj.won === 'TRUE' || obj.won === true;
@@ -271,7 +424,7 @@ function handleGetParticipants() {
  */
 function handleGetPrizes() {
   const sheet = getSheet(SHEET_PRIZES);
-  const headers = ['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order'];
+  const headers = ['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order', 'mode'];
   const lastRow = sheet.getLastRow();
   
   if (lastRow <= 1) {
@@ -341,7 +494,6 @@ function handleCheckIn(requestData) {
   
   // 從第2列開始搜尋（第1列是標題）
   for (let i = 2; i <= lastRow; i++) {
-    // 使用顯示值以保留前導零
     const rowId = sheet.getRange(i, 1).getDisplayValue();
     const rowIdStr = String(rowId || '').trim();
     const inputIdStr = String(participantId || '').trim();
@@ -367,7 +519,8 @@ function handleCheckIn(requestData) {
   }
   
   // 驗證密碼
-  if (!password || password.trim() === '') {
+  const passwordStr = (password ?? '').toString().trim();
+  if (passwordStr === '') {
     throw new Error('密碼不能為空');
   }
   
@@ -520,6 +673,7 @@ function handleAppendWinners(requestData) {
   return { success: true, message: `已批次新增 ${rowsData.length} 筆中獎紀錄` };
 }
 
+
 /**
  * 移除中獎紀錄（重抽）
  */
@@ -580,11 +734,9 @@ function handleUpdateParticipant(requestData) {
   const lastRow = sheet.getLastRow();
   
   // 尋找參與者
-  const participantIdStr = String(participantId || '');
   for (let i = 2; i <= lastRow; i++) {
-    // 使用顯示值以保留前導零
-    const rowId = String(sheet.getRange(i, 1).getDisplayValue());
-    if (rowId === participantIdStr) {
+    const rowId = sheet.getRange(i, 1).getDisplayValue();
+    if (String(rowId) === String(participantId)) {
       // 更新欄位
       Object.keys(updates).forEach(key => {
         const colIndex = headers.indexOf(key) + 1;
@@ -640,7 +792,7 @@ function handleUpdatePrize(requestData) {
   }
   
   const sheet = getSheet(SHEET_PRIZES);
-  const headers = ['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order'];
+  const headers = ['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order', 'mode'];
   const lastRow = sheet.getLastRow();
   
   // 尋找獎項
