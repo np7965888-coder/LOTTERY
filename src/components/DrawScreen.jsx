@@ -950,26 +950,67 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                           />
                           <h1 className="text-4xl font-bold text-white">南寶樹脂尾牙抽獎</h1>
                         </div>
-                        <div className="flex gap-3 relative z-[100] pointer-events-auto">
+                        <div 
+                          className="fixed right-0 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-[100] pointer-events-auto"
+                          style={{ transform: 'translateY(-50%)' }}
+                        >
                           <button
                             onClick={loadData}
                             disabled={isLoading}
-                            className={`px-4 py-2 text-white font-bold rounded-lg transition text-sm relative z-[100] pointer-events-auto ${
+                            className={`px-2 py-2 text-white font-bold rounded-l-lg transition-all duration-300 text-sm relative z-[100] pointer-events-auto overflow-hidden whitespace-nowrap group ${
                               isLoading 
                                 ? 'bg-gray-700 cursor-not-allowed border border-gray-600' 
                                 : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 border border-blue-500/50'
                             }`}
-                            style={{ position: 'relative', zIndex: 100 }}
+                            style={{ 
+                              position: 'relative', 
+                              zIndex: 100,
+                              width: '2rem',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isLoading) {
+                                e.currentTarget.style.width = 'auto';
+                                e.currentTarget.style.paddingRight = '1rem';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isLoading) {
+                                e.currentTarget.style.width = '2rem';
+                                e.currentTarget.style.paddingRight = '0.5rem';
+                              }
+                            }}
                             title={isLoading ? '載入中...' : '重新載入最新資料（如需要）'}
                           >
-                            {isLoading ? '載入中...' : '重新載入'}
+                            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                              {isLoading ? '載入中...' : '重新載入'}
+                            </span>
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 group-hover:opacity-0 opacity-100 transition-opacity duration-300">
+                              ↻
+                            </span>
                           </button>
                           <button
                             onClick={handleFullscreen}
-                            className="px-6 py-3 bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-white font-bold rounded-lg transition relative z-[100] border border-yellow-500/50 shadow-lg pointer-events-auto"
-                            style={{ position: 'relative', zIndex: 100 }}
+                            className="px-2 py-3 bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-white font-bold rounded-l-lg transition-all duration-300 relative z-[100] border border-yellow-500/50 shadow-lg pointer-events-auto overflow-hidden whitespace-nowrap group"
+                            style={{ 
+                              position: 'relative', 
+                              zIndex: 100,
+                              width: '2rem',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.width = 'auto';
+                              e.currentTarget.style.paddingRight = '1.5rem';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.width = '2rem';
+                              e.currentTarget.style.paddingRight = '0.5rem';
+                            }}
                           >
-                            大螢幕模式
+                            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                              大螢幕模式
+                            </span>
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 group-hover:opacity-0 opacity-100 transition-opacity duration-300">
+                              ⛶
+                            </span>
                           </button>
                         </div>
                       </div>
