@@ -67,11 +67,13 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
   const [batchWinners, setBatchWinners] = useState([]);
   const [displayName, setDisplayName] = useState('');
   const [currentPage, setCurrentPage] = useState(0);
+  const [goldBorderProgress, setGoldBorderProgress] = useState(0); // 金色邊框動畫進度 (0-1)
   const animationCleanupRef = useRef(null);
   const backgroundCanvasRef = useRef(null);
   const animationFrameRef = useRef(null);
   const resultCanvasRef = useRef(null);
   const resultAnimationFrameRef = useRef(null);
+  const goldBorderAnimationRef = useRef(null);
   
   const audioRef = useRef({
     spinning: null,
@@ -113,6 +115,25 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
   const maxBatchCount = currentPrize ? (isBatchMode ? Math.max(currentPrizeRemaining, 1) : 1) : 1;
   const canDraw = !!currentPrize && (isUnlimitedQuantity || currentPrizeRemaining > 0) && !isDrawing && (!isBatchMode || batchCount > 0);
   const noPrizes = sortedPrizes.length === 0;
+
+  // 計算金色邊框顏色（根據動畫進度從黯淡黑色到亮金色）
+  const getGoldBorderColor = (progress) => {
+    // 起點：黯淡黑色 #1a1a1a (26, 26, 26)
+    // 終點：亮金色 #FBC02D (251, 192, 45)
+    const startR = 26;
+    const startG = 26;
+    const startB = 26;
+    const endR = 251;
+    const endG = 192;
+    const endB = 45;
+    
+    const r = Math.round(startR + (endR - startR) * progress);
+    const g = Math.round(startG + (endG - startG) * progress);
+    const b = Math.round(startB + (endB - startB) * progress);
+    
+    return `rgb(${r}, ${g}, ${b})`;
+  };
+
 
   useEffect(() => {
     loadData();
@@ -459,6 +480,44 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
       setBatchCount(remaining);
     }
   }, [currentPrize, winnersByPrize, isBatchMode]);
+
+  // 金色邊框動畫效果（單筆抽選大獎專用）
+  useEffect(() => {
+    // 當顯示中獎者且為單筆抽選時，啟動金色邊框動畫
+    if (currentWinner && !isDrawing && isSinglePrize) {
+      setGoldBorderProgress(0); // 重置進度
+      
+      const duration = 2000; // 2秒（加速）
+      const startTime = Date.now();
+      
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1); // 0 到 1
+        
+        setGoldBorderProgress(progress);
+        
+        if (progress < 1) {
+          goldBorderAnimationRef.current = requestAnimationFrame(animate);
+        }
+      };
+      
+      goldBorderAnimationRef.current = requestAnimationFrame(animate);
+    } else {
+      // 清除動畫
+      if (goldBorderAnimationRef.current) {
+        cancelAnimationFrame(goldBorderAnimationRef.current);
+        goldBorderAnimationRef.current = null;
+      }
+      setGoldBorderProgress(0);
+    }
+    
+    return () => {
+      if (goldBorderAnimationRef.current) {
+        cancelAnimationFrame(goldBorderAnimationRef.current);
+        goldBorderAnimationRef.current = null;
+      }
+    };
+  }, [currentWinner, isDrawing, isSinglePrize]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -1094,21 +1153,32 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
 
             {currentWinner && !isDrawing && (
               <div className="space-y-8 animate-fade-in">
-                <div className="text-5xl font-bold mb-4 animate-pulse drop-shadow-lg" style={{ color: '#FBC02D' }}>
-                  恭喜中獎！
+                {/* 部門 */}
+                <div className="text-3xl font-bold mb-2" style={{ color: '#FFFFFF', textShadow: '0 2px 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>
+                  部門: {currentWinner.department}
+                </div>
+                {/* 工號 */}
+                <div className="text-3xl font-bold mb-2" style={{ color: '#FFFFFF', textShadow: '0 2px 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>
+                  工號: {currentWinner.id}
                 </div>
                 {/* 根據 checked_in 狀態顯示不同顏色 */}
                 {currentWinner.checked_in === 2 || currentWinner.checked_in === 9 ? (
                   <>
                     <div
-                      className="text-7xl font-bold text-white mb-6 drop-shadow-lg rounded-lg p-8"
+                      className={`text-7xl font-bold mb-6 drop-shadow-lg rounded-lg p-8 ${isSinglePrize ? 'gold-border-pulse' : ''}`}
                       style={{
-                        border: isSinglePrize ? '4px solid #FBC02D' : '4px solid rgba(255, 255, 255, 0.25)',
-                        background: 'linear-gradient(135deg, rgba(13, 25, 45, 0.8), rgba(20, 40, 70, 0.6))',
+                        color: '#FFFFFF',
+                        border: isSinglePrize 
+                          ? `4px solid ${getGoldBorderColor(goldBorderProgress)}`
+                          : '4px solid rgba(255, 255, 255, 0.25)',
+                        background: isSinglePrize
+                          ? `linear-gradient(135deg, rgba(${Math.round(26 + (251 - 26) * goldBorderProgress)}, ${Math.round(26 + (192 - 26) * goldBorderProgress)}, ${Math.round(26 + (45 - 26) * goldBorderProgress)}, ${0.1 + goldBorderProgress * 0.15}), rgba(${Math.round(26 + (255 - 26) * goldBorderProgress)}, ${Math.round(215 - 26) * goldBorderProgress}, ${Math.round(0 - 26) * goldBorderProgress}, ${0.05 + goldBorderProgress * 0.1}))`
+                          : 'linear-gradient(135deg, rgba(13, 25, 45, 0.8), rgba(20, 40, 70, 0.6))',
                         boxShadow: `
                           0 0 35px rgba(59, 130, 246, 0.4),
                           0 8px 32px rgba(0, 0, 0, 0.6)
-                        `
+                        `,
+                        textShadow: '0 4px 16px rgba(0, 0, 0, 0.8), 0 0 24px rgba(255, 255, 255, 0.4)',
                       }}
                     >
                       {currentWinner.name}
@@ -1130,11 +1200,15 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                   </>
                 ) : (
                   <div 
-                    className="text-7xl font-bold mb-6 rounded-lg p-8"
+                    className={`text-7xl font-bold mb-6 rounded-lg p-8 ${isSinglePrize ? 'gold-border-pulse' : ''}`}
                     style={{
-                      color: '#FBC02D',
-                      background: 'linear-gradient(135deg, rgba(251, 192, 45, 0.18), rgba(255, 215, 0, 0.12))',
-                      border: isSinglePrize ? '4px solid #FBC02D' : '4px solid rgba(255, 255, 255, 0.25)',
+                      color: '#FFFFFF',
+                      background: isSinglePrize 
+                        ? `linear-gradient(135deg, rgba(${Math.round(26 + (251 - 26) * goldBorderProgress)}, ${Math.round(26 + (192 - 26) * goldBorderProgress)}, ${Math.round(26 + (45 - 26) * goldBorderProgress)}, ${0.1 + goldBorderProgress * 0.15}), rgba(${Math.round(26 + (255 - 26) * goldBorderProgress)}, ${Math.round(215 - 26) * goldBorderProgress}, ${Math.round(0 - 26) * goldBorderProgress}, ${0.05 + goldBorderProgress * 0.1}))`
+                        : 'linear-gradient(135deg, rgba(251, 192, 45, 0.18), rgba(255, 215, 0, 0.12))',
+                      border: isSinglePrize 
+                        ? `4px solid ${getGoldBorderColor(goldBorderProgress)}`
+                        : '4px solid rgba(255, 255, 255, 0.25)',
                       boxShadow: `
                         0 0 40px rgba(251, 192, 45, 0.8),
                         0 0 80px rgba(251, 192, 45, 0.5),
@@ -1148,14 +1222,11 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                     {currentWinner.name}
                   </div>
                 )}
-                <div className="text-3xl text-gray-200 mb-2">
+                <div className="text-3xl font-bold mb-2" style={{ color: '#FFFFFF', textShadow: '0 2px 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>
                   {currentPrize?.prize_title}
                 </div>
-                <div className="text-2xl text-gray-300 mb-8">
+                <div className="text-2xl font-semibold mb-8" style={{ color: '#F0F0F0', textShadow: '0 2px 6px rgba(0, 0, 0, 0.7), 0 0 12px rgba(255, 255, 255, 0.2)' }}>
                   {currentPrize?.prize_name}
-                </div>
-                <div className="text-xl text-gray-400 mb-2">
-                  工號: {currentWinner.id} | 部門: {currentWinner.department}
                 </div>
                 <button
                   onClick={() => {
@@ -1190,9 +1261,6 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
               
               return (
                 <div className="h-full flex flex-col space-y-4 animate-fade-in">
-                  <div className="text-5xl font-bold mb-2 drop-shadow-lg flex-shrink-0" style={{ color: '#FBC02D' }}>
-                    恭喜中獎！
-                  </div>
                   <div className="text-3xl text-gray-200 mb-3 flex-shrink-0">
                     {currentPrize?.prize_title} - {currentPrize?.prize_name}
                   </div>
@@ -1225,6 +1293,8 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                                   : 'bg-blue-900/60 border-blue-500/60 text-blue-200'
                               }`}
                             >
+                              <div className="text-base text-gray-300 mb-2">部門: {winner.department}</div>
+                              <div className="text-base text-gray-300 mb-3">工號: {winner.id}</div>
                               <div className="text-4xl font-bold mb-3 drop-shadow">{winner.name}</div>
                               {isAbsent && (
                                 <div className="text-base font-bold text-blue-200 mb-2">
@@ -1232,8 +1302,6 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                                   {winner.checked_in === 2 ? '（公差無法到場）' : '（因公未到）'}
                                 </div>
                               )}
-                              <div className="text-base text-gray-300">工號: {winner.id}</div>
-                              <div className="text-base text-gray-300">部門: {winner.department}</div>
                             </div>
                           );
                         })}

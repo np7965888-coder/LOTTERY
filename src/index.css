@@ -15,4 +15,39 @@ body {
   box-sizing: border-box;
 }
 
+/* 大獎邊框脈衝動畫 - 從暗金色到微亮金色，3秒循環 */
+@keyframes gold-border-pulse {
+  0%, 100% {
+    border-color: rgb(180, 140, 30);
+    box-shadow: 
+      0 0 0 4px rgba(180, 140, 30, 0.4),
+      0 0 10px rgba(180, 140, 30, 0.3),
+      0 0 20px rgba(180, 140, 30, 0.2);
+  }
+  50% {
+    border-color: rgb(255, 220, 80);
+    box-shadow: 
+      0 0 0 4px rgba(255, 220, 80, 0.8),
+      0 0 15px rgba(255, 220, 80, 0.6),
+      0 0 30px rgba(255, 220, 80, 0.4),
+      0 0 50px rgba(255, 220, 80, 0.2);
+  }
+}
 
+.gold-border-pulse {
+  position: relative;
+}
+
+.gold-border-pulse::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: inherit;
+  border: 4px solid rgb(180, 140, 30);
+  pointer-events: none;
+  z-index: 1;
+  animation: gold-border-pulse 3s ease-in-out infinite;
+}
