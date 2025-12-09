@@ -1,5 +1,5 @@
 // Google Apps Script Web App URL
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxigL-O4mM7TqHFf618Fl_URJgdsdhvpt8ddY4o6UIRrA6diUocqhll8YaF4K36XhJP7g/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzm9mAgYYoa9rXAapoDwYnqUdS5S-X8BSpMk-l58BTzFyJa2ujqj2TDt6lpIfu7RGQzlA/exec';
 
 /**
  * 呼叫 Google Apps Script API
@@ -28,26 +28,19 @@ async function callGAS(action, data = {}, retryCount = 0) {
 
     console.log(`[API] 呼叫 ${action}，嘗試 ${retryCount + 1}/${MAX_RETRIES + 1}`);
 
-    // 使用 fetch 並加入超時處理
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 秒超時
-
+    // 使用 fetch（不設定超時，讓 GAS 有足夠時間完成處理）
     let response;
     try {
       response = await fetch(GAS_URL, {
         method: 'POST',
         body: formData,
         // 不設定 Content-Type，讓瀏覽器自動設定（包含 boundary）
-        redirect: 'follow', // 跟隨重定向（Google Apps Script 可能會返回 302）
-        signal: controller.signal
+        redirect: 'follow' // 跟隨重定向（Google Apps Script 可能會返回 302）
         // 注意：權限設定為「任何人」時，不需要 credentials: 'include'
       });
-      clearTimeout(timeoutId);
     } catch (fetchError) {
-      clearTimeout(timeoutId);
-      
-      // 如果是超時或網路錯誤，嘗試重試
-      if ((fetchError.name === 'AbortError' || fetchError.message.includes('Failed to fetch')) && retryCount < MAX_RETRIES) {
+      // 如果是網路錯誤，嘗試重試
+      if (fetchError.message.includes('Failed to fetch') && retryCount < MAX_RETRIES) {
         console.warn(`[API] 請求失敗，${1000 * (retryCount + 1)}ms 後重試...`);
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
         return callGAS(action, data, retryCount + 1);
@@ -206,8 +199,8 @@ export async function getWinners() {
 /**
  * 報到
  */
-export async function checkIn(participantId, password) {
-  return callGAS('checkIn', { participantId, password });
+export async function checkIn(participantId) {
+  return callGAS('checkIn', { participantId });
 }
 
 /**

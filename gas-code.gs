@@ -471,10 +471,9 @@ function handleGetWinners() {
  */
 function handleCheckIn(requestData) {
   const participantId = requestData.participantId;
-  const password = requestData.password;
   
-  if (!participantId || !password) {
-    throw new Error('缺少必要參數：工號和密碼');
+  if (!participantId) {
+    throw new Error('缺少必要參數：工號');
   }
   
   const sheet = getSheet(SHEET_PARTICIPANTS);
@@ -489,7 +488,6 @@ function handleCheckIn(requestData) {
   // 尋找參與者
   let found = false;
   let participantName = '';
-  let participantPassword = '';
   let participantRow = -1;
   
   // 從第2列開始搜尋（第1列是標題）
@@ -503,7 +501,6 @@ function handleCheckIn(requestData) {
       found = true;
       participantRow = i;
       participantName = sheet.getRange(i, 2).getValue(); // name (第2欄)
-      participantPassword = sheet.getRange(i, 4).getValue(); // password (第4欄)
       break;
     }
   }
@@ -516,20 +513,6 @@ function handleCheckIn(requestData) {
   // 檢查 name 是否為空
   if (!participantName || participantName.toString().trim() === '') {
     throw new Error('參與者資料不完整，姓名欄位為空');
-  }
-  
-  // 驗證密碼
-  const passwordStr = (password ?? '').toString().trim();
-  if (passwordStr === '') {
-    throw new Error('密碼不能為空');
-  }
-  
-  // 比對密碼（從試算表讀取的密碼）
-  const storedPassword = String(participantPassword || '').trim();
-  const inputPassword = String(password).trim();
-  
-  if (storedPassword !== inputPassword) {
-    throw new Error('密碼錯誤，請確認密碼是否正確');
   }
   
   // 檢查是否已經報到
