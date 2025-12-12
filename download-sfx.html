@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>抽獎系統音效下載指南</title>
+    <style>
+        body {
+            font-family: 'Microsoft JhengHei', Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        .sound-item {
+            background: #f9f9f9;
+            padding: 20px;
+            margin: 15px 0;
+            border-left: 4px solid #4CAF50;
+            border-radius: 5px;
+        }
+        .sound-item h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .links {
+            margin: 10px 0;
+        }
+        .links a {
+            display: inline-block;
+            margin: 5px 10px 5px 0;
+            padding: 8px 15px;
+            background: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        .links a:hover {
+            background: #45a049;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .warning {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #ffc107;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        ul {
+            line-height: 1.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 抽獎系統音效下載指南</h1>
+        
+        <div class="info">
+            <strong>📋 說明：</strong>請將下載的音效檔案放置到 <code>public/sfx/</code> 目錄中。
+        </div>
+
+        <h2>必要音效檔案</h2>
+
+        <div class="sound-item">
+            <h3>1. spinning.mp3 - 滾輪轉動音效</h3>
+            <p><strong>用途：</strong>抽獎時名字滾動期間循環播放</p>
+            <p><strong>建議：</strong>機械轉動聲、快速滾動音效、類似老虎機音效</p>
+            <div class="links">
+                <a href="https://mixkit.co/free-sound-effects/slot-machine/" target="_blank">Mixkit - Slot Machine</a>
+                <a href="https://pixabay.com/sound-effects/search/slot%20machine/" target="_blank">Pixabay - Slot Machine</a>
+                <a href="https://freesound.org/search/?q=slot+machine+spin" target="_blank">Freesound - Slot Machine</a>
+            </div>
+        </div>
+
+        <div class="sound-item">
+            <h3>2. win.mp3 - 中獎音效</h3>
+            <p><strong>用途：</strong>抽中中獎者時播放</p>
+            <p><strong>建議：</strong>慶祝音效、勝利號角、歡呼聲</p>
+            <div class="links">
+                <a href="https://mixkit.co/free-sound-effects/victory/" target="_blank">Mixkit - Victory</a>
+                <a href="https://pixabay.com/sound-effects/search/win+victory/" target="_blank">Pixabay - Win Victory</a>
+                <a href="https://freesound.org/search/?q=win+sound+victory" target="_blank">Freesound - Win Sound</a>
+            </div>
+        </div>
+
+        <div class="sound-item">
+            <h3>3. confetti.mp3 - 煙火彩帶音效</h3>
+            <p><strong>用途：</strong>顯示中獎者同時播放（配合煙火動畫）</p>
+            <p><strong>建議：</strong>煙火爆炸聲、派對音效、慶祝音樂</p>
+            <div class="links">
+                <a href="https://mixkit.co/free-sound-effects/party/" target="_blank">Mixkit - Party</a>
+                <a href="https://pixabay.com/sound-effects/search/confetti+fireworks/" target="_blank">Pixabay - Confetti</a>
+                <a href="https://freesound.org/search/?q=confetti+party+popper" target="_blank">Freesound - Confetti</a>
+            </div>
+        </div>
+
+        <div class="sound-item">
+            <h3>4. drumroll.mp3 - 鼓聲音效（選用）</h3>
+            <p><strong>用途：</strong>抽獎前緊張時刻（目前未啟用，可自行在程式碼中加入）</p>
+            <p><strong>建議：</strong>鼓聲滾奏、緊張配樂</p>
+            <div class="links">
+                <a href="https://mixkit.co/free-sound-effects/drum/" target="_blank">Mixkit - Drum</a>
+                <a href="https://pixabay.com/sound-effects/search/drumroll/" target="_blank">Pixabay - Drumroll</a>
+                <a href="https://freesound.org/search/?q=drumroll" target="_blank">Freesound - Drumroll</a>
+            </div>
+        </div>
+
+        <h2>📝 下載步驟</h2>
+        <ol>
+            <li>點擊上方任一連結前往免費音效網站</li>
+            <li>在網站上搜尋適合的音效（使用建議的關鍵字）</li>
+            <li>下載 MP3 格式的音效檔案</li>
+            <li>將檔案重新命名為對應的檔名（如 <code>spinning.mp3</code>）</li>
+            <li>將檔案放置到 <code>public/sfx/</code> 目錄中</li>
+        </ol>
+
+        <h2>🔍 搜尋關鍵字建議</h2>
+        <ul>
+            <li><strong>spinning:</strong> "slot machine", "wheel spin", "rolling", "mechanical spin"</li>
+            <li><strong>win:</strong> "win sound", "victory", "fanfare", "celebration", "tada"</li>
+            <li><strong>confetti:</strong> "fireworks", "party popper", "celebration", "confetti"</li>
+            <li><strong>drumroll:</strong> "drum roll", "suspense", "tension"</li>
+        </ul>
+
+        <div class="warning">
+            <strong>⚠️ 注意事項：</strong>
+            <ul>
+                <li>請確保使用的音效檔案具有合法使用權限</li>
+                <li>建議每個檔案不超過 1MB，以加快載入速度</li>
+                <li>上傳音效後請測試音量是否適中</li>
+                <li>如果音效檔案不存在，系統會靜默失敗，不影響抽獎功能</li>
+            </ul>
+        </div>
+
+        <h2>📂 檔案結構</h2>
+        <pre style="background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto;">
+public/
+  sfx/
+    spinning.mp3    (必要)
+    win.mp3         (必要)
+    confetti.mp3    (必要)
+    drumroll.mp3    (選用)
+</pre>
+    </div>
+</body>
+</html>
+

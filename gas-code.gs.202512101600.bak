@@ -2,12 +2,6 @@
 // Google Apps Script 代碼
 // 用於抽獎系統的 Web App API
 // 請將此代碼貼到 Google Apps Script 編輯器中
-//
-// 重要說明：
-// - 此系統作為一次性資料來源使用
-// - 前端在頁面載入時一次性下載所有資料（participants, prizes, winners）
-// - 之後所有操作（抽獎、報到、查詢）都使用本地資料
-// - API 主要用於：1) 初始資料載入 2) 背景上傳操作結果（報到、中獎記錄）
 
 // 設定：Google 試算表名稱
 const SPREADSHEET_NAME = 'LOTTERY';
@@ -54,15 +48,15 @@ function getSheet(sheetName) {
     sheet = ss.insertSheet(sheetName);
         // 根據工作表類型設定標題列
         if (sheetName === SHEET_PARTICIPANTS) {
-          sheet.getRange(1, 1, 1, 9).setValues([['company', 'id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes']]);
+          sheet.getRange(1, 1, 1, 8).setValues([['id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes']]);
           // 設定 id 欄位為文字格式（保留前導零）
-          sheet.getRange(2, 2, 1000, 1).setNumberFormat('@');
+          sheet.getRange(2, 1, 1000, 1).setNumberFormat('@');
     } else if (sheetName === SHEET_PRIZES) {
-      sheet.getRange(1, 1, 1, 8).setValues([['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order', 'mode', 'company']]);
+      sheet.getRange(1, 1, 1, 7).setValues([['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order', 'mode']]);
     } else if (sheetName === SHEET_WINNERS) {
-      sheet.getRange(1, 1, 1, 10).setValues([['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_company', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes']]);
+      sheet.getRange(1, 1, 1, 9).setValues([['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes']]);
       // 設定 participant_id 欄位為文字格式（保留前導零）
-      sheet.getRange(2, 6, 1000, 1).setNumberFormat('@');
+      sheet.getRange(2, 5, 1000, 1).setNumberFormat('@');
     } else if (sheetName === SHEET_SETTINGS) {
       sheet.getRange(1, 1, 1, 2).setValues([['key', 'value']]);
     }
@@ -71,12 +65,12 @@ function getSheet(sheetName) {
     if (sheetName === SHEET_PARTICIPANTS) {
       const lastRow = Math.max(sheet.getLastRow(), 1000);
       if (lastRow > 1) {
-        sheet.getRange(2, 2, lastRow - 1, 1).setNumberFormat('@'); // id 在第2欄
+        sheet.getRange(2, 1, lastRow - 1, 1).setNumberFormat('@');
       }
     } else if (sheetName === SHEET_WINNERS) {
       const lastRow = Math.max(sheet.getLastRow(), 1000);
       if (lastRow > 1) {
-        sheet.getRange(2, 6, lastRow - 1, 1).setNumberFormat('@'); // participant_id 在第6欄
+        sheet.getRange(2, 5, lastRow - 1, 1).setNumberFormat('@');
       }
     }
   }
@@ -403,12 +397,10 @@ function handleUpdateSettings(requestData) {
 
 /**
  * 取得參與者名單
- * 欄位順序：company, id, name, department, password, checked_in, won, checked_date, notes
- * 注意：此函數在頁面載入時被調用一次，之後前端使用本地資料
  */
 function handleGetParticipants() {
   const sheet = getSheet(SHEET_PARTICIPANTS);
-  const headers = ['company', 'id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes'];
+  const headers = ['id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes'];
   const lastRow = sheet.getLastRow();
   
   if (lastRow <= 1) {
@@ -429,13 +421,10 @@ function handleGetParticipants() {
 
 /**
  * 取得獎項列表
- * 欄位順序：prize_id, prize_title, prize_name, quantity, description, order, mode, company
- * 注意：company 欄位用於限制可抽獎人員（ALL 表示不限制）
- * 此函數在頁面載入時被調用一次，之後前端使用本地資料
  */
 function handleGetPrizes() {
   const sheet = getSheet(SHEET_PRIZES);
-  const headers = ['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order', 'mode', 'company'];
+  const headers = ['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order', 'mode'];
   const lastRow = sheet.getLastRow();
   
   if (lastRow <= 1) {
@@ -448,7 +437,6 @@ function handleGetPrizes() {
     // 轉換資料類型
     obj.quantity = obj.quantity ? Number(obj.quantity) : 0;
     obj.order = obj.order ? Number(obj.order) : 0;
-    // company 欄位保持字串格式
     data.push(obj);
   }
   
@@ -457,12 +445,10 @@ function handleGetPrizes() {
 
 /**
  * 取得中獎紀錄
- * 欄位順序：timestamp, prize_id, prize_title, prize_name, participant_company, participant_id, participant_name, admin, claimed, notes
- * 注意：此函數在頁面載入時被調用一次，之後前端使用本地資料
  */
 function handleGetWinners() {
   const sheet = getSheet(SHEET_WINNERS);
-  const headers = ['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_company', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes'];
+  const headers = ['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes'];
   const lastRow = sheet.getLastRow();
   
   if (lastRow <= 1) {
@@ -482,8 +468,6 @@ function handleGetWinners() {
 
 /**
  * 報到
- * 注意：此函數在背景執行，前端已先更新本地資料
- * 主要用於將報到結果同步到 Google Sheet
  */
 function handleCheckIn(requestData) {
   const participantId = requestData.participantId;
@@ -493,7 +477,7 @@ function handleCheckIn(requestData) {
   }
   
   const sheet = getSheet(SHEET_PARTICIPANTS);
-  const headers = ['company', 'id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes'];
+  const headers = ['id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes'];
   const lastRow = sheet.getLastRow();
   
   // 檢查是否有資料（lastRow = 1 表示只有標題列）
@@ -508,7 +492,7 @@ function handleCheckIn(requestData) {
   
   // 從第2列開始搜尋（第1列是標題）
   for (let i = 2; i <= lastRow; i++) {
-    const rowId = sheet.getRange(i, 2).getDisplayValue(); // id (第2欄)
+    const rowId = sheet.getRange(i, 1).getDisplayValue();
     const rowIdStr = String(rowId || '').trim();
     const inputIdStr = String(participantId || '').trim();
     
@@ -516,7 +500,7 @@ function handleCheckIn(requestData) {
     if (rowIdStr === inputIdStr) {
       found = true;
       participantRow = i;
-      participantName = sheet.getRange(i, 3).getValue(); // name (第3欄)
+      participantName = sheet.getRange(i, 2).getValue(); // name (第2欄)
       break;
     }
   }
@@ -532,7 +516,7 @@ function handleCheckIn(requestData) {
   }
   
   // 檢查是否已經報到
-  const checkedIn = sheet.getRange(participantRow, 6).getValue(); // checked_in (第6欄)
+  const checkedIn = sheet.getRange(participantRow, 5).getValue(); // checked_in (第5欄)
   if (checkedIn == 1) {
     // 已經報到過，仍然返回成功，但提示已報到
     return {
@@ -544,8 +528,8 @@ function handleCheckIn(requestData) {
   }
   
   // 更新報到狀態
-  sheet.getRange(participantRow, 6).setValue(1); // checked_in = 1 (第6欄)
-  sheet.getRange(participantRow, 8).setValue(new Date().toISOString()); // checked_date (第8欄)
+  sheet.getRange(participantRow, 5).setValue(1); // checked_in = 1 (第5欄)
+  sheet.getRange(participantRow, 7).setValue(new Date().toISOString()); // checked_date (第7欄)
   
   return {
     success: true,
@@ -556,9 +540,6 @@ function handleCheckIn(requestData) {
 
 /**
  * 新增中獎紀錄
- * 注意：此函數在背景執行，前端已先更新本地資料並顯示結果
- * 主要用於將中獎記錄同步到 Google Sheet
- * 同時會更新參與者的 won 狀態
  */
 function handleAppendWinner(requestData) {
   const winnerData = {
@@ -566,7 +547,6 @@ function handleAppendWinner(requestData) {
     prize_id: requestData.prize_id || '',
     prize_title: requestData.prize_title || '',
     prize_name: requestData.prize_name || '',
-    participant_company: requestData.participant_company || '',
     participant_id: requestData.participant_id || '',
     participant_name: requestData.participant_name || '',
     admin: requestData.admin || 'system',
@@ -575,7 +555,7 @@ function handleAppendWinner(requestData) {
   };
   
   const sheet = getSheet(SHEET_WINNERS);
-  const headers = ['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_company', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes'];
+  const headers = ['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes'];
   
   // 取得下一列
   const nextRow = sheet.getLastRow() + 1;
@@ -597,9 +577,9 @@ function handleAppendWinner(requestData) {
   const participantIdStr = String(winnerData.participant_id || '');
   for (let i = 2; i <= lastRow; i++) {
       // 使用顯示值以保留前導零
-      const rowId = String(participantsSheet.getRange(i, 2).getDisplayValue()); // id (第2欄)
+      const rowId = String(participantsSheet.getRange(i, 1).getDisplayValue());
       if (rowId === participantIdStr) {
-        participantsSheet.getRange(i, 7).setValue('TRUE'); // won = TRUE (第7欄)
+        participantsSheet.getRange(i, 6).setValue('TRUE'); // won = TRUE (第6欄)
         break;
       }
   }
@@ -609,9 +589,6 @@ function handleAppendWinner(requestData) {
 
 /**
  * 批次新增中獎紀錄（優化性能）
- * 注意：此函數在背景執行，前端已先更新本地資料並顯示結果
- * 主要用於將批次中獎記錄同步到 Google Sheet
- * 同時會批次更新參與者的 won 狀態
  */
 function handleAppendWinners(requestData) {
   const winnersList = requestData.winners || [];
@@ -621,7 +598,7 @@ function handleAppendWinners(requestData) {
   }
   
   const sheet = getSheet(SHEET_WINNERS);
-  const headers = ['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_company', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes'];
+  const headers = ['timestamp', 'prize_id', 'prize_title', 'prize_name', 'participant_id', 'participant_name', 'admin', 'claimed', 'notes'];
   
   // 準備批次寫入的資料
   const rowsData = [];
@@ -634,7 +611,6 @@ function handleAppendWinners(requestData) {
       prize_id: winnerData.prize_id || '',
       prize_title: winnerData.prize_title || '',
       prize_name: winnerData.prize_name || '',
-      participant_company: winnerData.participant_company || '',
       participant_id: winnerData.participant_id || '',
       participant_name: winnerData.participant_name || '',
       admin: winnerData.admin || 'system',
@@ -666,9 +642,9 @@ function handleAppendWinners(requestData) {
   const lastRow = participantsSheet.getLastRow();
   for (let i = 2; i <= lastRow; i++) {
     // 使用顯示值以保留前導零
-    const rowId = String(participantsSheet.getRange(i, 2).getDisplayValue()); // id (第2欄)
+    const rowId = String(participantsSheet.getRange(i, 1).getDisplayValue());
     if (participantIdsToUpdate.has(rowId)) {
-      participantsSheet.getRange(i, 7).setValue('TRUE'); // won = TRUE (第7欄)
+      participantsSheet.getRange(i, 6).setValue('TRUE'); // won = TRUE (第6欄)
       participantIdsToUpdate.delete(rowId);
       // 如果所有參與者都已更新，提前結束
       if (participantIdsToUpdate.size === 0) {
@@ -699,7 +675,7 @@ function handleRemoveWinner(requestData) {
   const participantIdStr = String(participantId || '');
   for (let i = lastRow; i >= 2; i--) {
     // 使用顯示值以保留前導零
-    const rowParticipantId = String(sheet.getRange(i, 6).getDisplayValue()); // participant_id (第6欄)
+    const rowParticipantId = String(sheet.getRange(i, 5).getDisplayValue()); // participant_id
     const rowTimestamp = sheet.getRange(i, 1).getValue(); // timestamp
     
     if (rowParticipantId === participantIdStr && 
@@ -711,9 +687,9 @@ function handleRemoveWinner(requestData) {
       const pLastRow = participantsSheet.getLastRow();
       for (let j = 2; j <= pLastRow; j++) {
         // 使用顯示值以保留前導零
-        const rowId = String(participantsSheet.getRange(j, 2).getDisplayValue()); // id (第2欄)
+        const rowId = String(participantsSheet.getRange(j, 1).getDisplayValue());
         if (rowId === participantIdStr) {
-          participantsSheet.getRange(j, 7).setValue('FALSE'); // won = FALSE (第7欄)
+          participantsSheet.getRange(j, 6).setValue('FALSE'); // won = FALSE (第6欄)
           break;
         }
       }
@@ -737,12 +713,12 @@ function handleUpdateParticipant(requestData) {
   }
   
   const sheet = getSheet(SHEET_PARTICIPANTS);
-  const headers = ['company', 'id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes'];
+  const headers = ['id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes'];
   const lastRow = sheet.getLastRow();
   
   // 尋找參與者
   for (let i = 2; i <= lastRow; i++) {
-    const rowId = sheet.getRange(i, 2).getDisplayValue(); // id (第2欄)
+    const rowId = sheet.getRange(i, 1).getDisplayValue();
     if (String(rowId) === String(participantId)) {
       // 更新欄位
       Object.keys(updates).forEach(key => {
@@ -770,7 +746,7 @@ function handleImportParticipants(requestData) {
   }
   
   const sheet = getSheet(SHEET_PARTICIPANTS);
-  const headers = ['company', 'id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes'];
+  const headers = ['id', 'name', 'department', 'password', 'checked_in', 'won', 'checked_date', 'notes'];
   
   // 清除現有資料（保留標題列）
   const lastRow = sheet.getLastRow();
@@ -799,7 +775,7 @@ function handleUpdatePrize(requestData) {
   }
   
   const sheet = getSheet(SHEET_PRIZES);
-  const headers = ['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order', 'mode', 'company'];
+  const headers = ['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order', 'mode'];
   const lastRow = sheet.getLastRow();
   
   // 尋找獎項

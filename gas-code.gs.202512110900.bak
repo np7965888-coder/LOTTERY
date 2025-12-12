@@ -2,12 +2,6 @@
 // Google Apps Script 代碼
 // 用於抽獎系統的 Web App API
 // 請將此代碼貼到 Google Apps Script 編輯器中
-//
-// 重要說明：
-// - 此系統作為一次性資料來源使用
-// - 前端在頁面載入時一次性下載所有資料（participants, prizes, winners）
-// - 之後所有操作（抽獎、報到、查詢）都使用本地資料
-// - API 主要用於：1) 初始資料載入 2) 背景上傳操作結果（報到、中獎記錄）
 
 // 設定：Google 試算表名稱
 const SPREADSHEET_NAME = 'LOTTERY';
@@ -403,8 +397,6 @@ function handleUpdateSettings(requestData) {
 
 /**
  * 取得參與者名單
- * 欄位順序：company, id, name, department, password, checked_in, won, checked_date, notes
- * 注意：此函數在頁面載入時被調用一次，之後前端使用本地資料
  */
 function handleGetParticipants() {
   const sheet = getSheet(SHEET_PARTICIPANTS);
@@ -429,9 +421,6 @@ function handleGetParticipants() {
 
 /**
  * 取得獎項列表
- * 欄位順序：prize_id, prize_title, prize_name, quantity, description, order, mode, company
- * 注意：company 欄位用於限制可抽獎人員（ALL 表示不限制）
- * 此函數在頁面載入時被調用一次，之後前端使用本地資料
  */
 function handleGetPrizes() {
   const sheet = getSheet(SHEET_PRIZES);
@@ -457,8 +446,6 @@ function handleGetPrizes() {
 
 /**
  * 取得中獎紀錄
- * 欄位順序：timestamp, prize_id, prize_title, prize_name, participant_company, participant_id, participant_name, admin, claimed, notes
- * 注意：此函數在頁面載入時被調用一次，之後前端使用本地資料
  */
 function handleGetWinners() {
   const sheet = getSheet(SHEET_WINNERS);
@@ -482,8 +469,6 @@ function handleGetWinners() {
 
 /**
  * 報到
- * 注意：此函數在背景執行，前端已先更新本地資料
- * 主要用於將報到結果同步到 Google Sheet
  */
 function handleCheckIn(requestData) {
   const participantId = requestData.participantId;
@@ -556,9 +541,6 @@ function handleCheckIn(requestData) {
 
 /**
  * 新增中獎紀錄
- * 注意：此函數在背景執行，前端已先更新本地資料並顯示結果
- * 主要用於將中獎記錄同步到 Google Sheet
- * 同時會更新參與者的 won 狀態
  */
 function handleAppendWinner(requestData) {
   const winnerData = {
@@ -609,9 +591,6 @@ function handleAppendWinner(requestData) {
 
 /**
  * 批次新增中獎紀錄（優化性能）
- * 注意：此函數在背景執行，前端已先更新本地資料並顯示結果
- * 主要用於將批次中獎記錄同步到 Google Sheet
- * 同時會批次更新參與者的 won 狀態
  */
 function handleAppendWinners(requestData) {
   const winnersList = requestData.winners || [];

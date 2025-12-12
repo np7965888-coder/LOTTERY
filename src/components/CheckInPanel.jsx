@@ -1,72 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
-import { checkIn, getWinners, getPrizes } from '../services/api';
+import { useState } from 'react';
+import { useData } from '../contexts/DataContext';
 
-// 本地資料緩存（用於查詢中獎）
-const winnersCache = {
-  winners: null,
-  prizes: null,
-  timestamp: null,
-  loading: false,
-  listeners: [], // 緩存更新監聽器
-};
-
-// 緩存有效期（30秒）
-const CACHE_DURATION = 30000;
-
-// 載入中獎資料到緩存
-const loadWinnersCache = async (forceRefresh = false) => {
-  if (winnersCache.loading) {
-    return new Promise((resolve) => {
-      const checkInterval = setInterval(() => {
-        if (!winnersCache.loading) {
-          clearInterval(checkInterval);
-          resolve();
-        }
-      }, 100);
-    });
-  }
-
-  // 如果不是強制刷新且緩存仍然有效，則跳過
-  if (!forceRefresh && winnersCache.timestamp && Date.now() - winnersCache.timestamp < CACHE_DURATION) {
-    return;
-  }
-
-  winnersCache.loading = true;
-
-  try {
-    const [winnersData, prizesData] = await Promise.all([
-      getWinners(),
-      getPrizes()
-    ]);
-    
-    winnersCache.winners = winnersData.data || [];
-    winnersCache.prizes = prizesData.data || [];
-    winnersCache.timestamp = Date.now();
-
-    // 通知所有監聽器緩存已更新
-    winnersCache.listeners.forEach(listener => {
-      try {
-        listener();
-      } catch (err) {
-        console.error('緩存更新監聽器錯誤:', err);
-      }
-    });
-  } catch (error) {
-    console.error('載入中獎資料失敗:', error);
-    throw error;
-  } finally {
-    winnersCache.loading = false;
-  }
-};
-
-// 強制刷新緩存（用於抽獎後立即更新）
-export const refreshWinnersCache = () => {
-  loadWinnersCache(true).catch((err) => {
-    console.error('強制刷新緩存失敗:', err);
-  });
+// 格式化中獎者姓名顯示（非 TW 公司顯示「姓名(公司)」）
+const formatWinnerName = (name, company) => {
+  const companyText = (company || '').toString().trim();
+  if (!companyText) return name;
+  if (companyText.toUpperCase() === 'TW') return name;
+  return `${name}(${companyText})`;
 };
 
 export default function CheckInPanel({ onCheckInSuccess }) {
+  // 使用全局資料
+  const { winners, prizes, checkIn: checkInWithContext, dataLoaded, participants } = useData();
+  
   const [participantId, setParticipantId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -77,24 +23,6 @@ export default function CheckInPanel({ onCheckInSuccess }) {
   const [queryLoading, setQueryLoading] = useState(false);
   const [queryResult, setQueryResult] = useState(null);
   const [showQueryModal, setShowQueryModal] = useState(false);
-  const refreshTimerRef = useRef(null);
-
-  // 定期更新緩存
-  useEffect(() => {
-    // 首次載入緩存
-    loadWinnersCache().catch(() => {});
-
-    // 每30秒自動刷新緩存
-    refreshTimerRef.current = setInterval(() => {
-      loadWinnersCache().catch(() => {});
-    }, 30000);
-
-    return () => {
-      if (refreshTimerRef.current) {
-        clearInterval(refreshTimerRef.current);
-      }
-    };
-  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -104,8 +32,8 @@ export default function CheckInPanel({ onCheckInSuccess }) {
     // 先顯示處理中狀態，不阻塞 UI
     setLoading(true);
 
-    // 在背景異步處理報到（不阻塞 UI）
-    checkIn(participantId)
+    // 使用本地資料處理報到（不阻塞 UI）
+    checkInWithContext(participantId)
       .then(result => {
         if (result.success) {
           const name = result.name || '參與者';
@@ -140,15 +68,13 @@ export default function CheckInPanel({ onCheckInSuccess }) {
     setQueryResult(null);
 
     try {
-      // 確保緩存已載入
-      await loadWinnersCache();
-
-      if (!winnersCache.winners || !winnersCache.prizes) {
-        throw new Error('資料載入失敗，請稍後再試');
+      // 使用本地資料查詢（不需要從 API 載入）
+      if (!dataLoaded || !winners || !prizes) {
+        throw new Error('資料尚未載入，請先在管理後台下載資料');
       }
 
       // 搜尋該工號的中獎記錄
-      const userWinners = winnersCache.winners.filter(
+      const userWinners = winners.filter(
         w => String(w.participant_id).toLowerCase() === String(queryId).trim().toLowerCase()
       );
 
@@ -160,13 +86,14 @@ export default function CheckInPanel({ onCheckInSuccess }) {
         });
       } else {
         // 整理中獎獎項
-        const prizes = userWinners.map(winner => {
-          const prize = winnersCache.prizes.find(p => p.prize_id === winner.prize_id);
+        const prizeList = userWinners.map(winner => {
+          const prize = prizes.find(p => p.prize_id === winner.prize_id);
           return {
             prizeTitle: winner.prize_title || prize?.prize_title || '未知獎項',
             prizeName: winner.prize_name || prize?.prize_name || '',
             timestamp: winner.timestamp,
-            participantName: winner.participant_name
+            participantName: winner.participant_name,
+            participantCompany: winner.participant_company
           };
         });
 
@@ -174,8 +101,9 @@ export default function CheckInPanel({ onCheckInSuccess }) {
           found: true,
           participantId: queryId,
           participantName: userWinners[0].participant_name,
-          prizes: prizes,
-          count: prizes.length
+          participantCompany: userWinners[0].participant_company,
+          prizes: prizeList,
+          count: prizeList.length
         });
       }
 
@@ -202,7 +130,23 @@ export default function CheckInPanel({ onCheckInSuccess }) {
           尾牙抽獎活動報名
         </h1>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* 資料未載入提示 */}
+        {!dataLoaded && (
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <span className="text-yellow-400 text-xl">⚠️</span>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-yellow-700">
+                  <strong>資料尚未載入：</strong>請先在管理後台頁面下載資料後，才能進行報到。
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <form onSubmit={handleSubmit} className="space-y-4" style={{ opacity: dataLoaded ? 1 : 0.5, pointerEvents: dataLoaded ? 'auto' : 'none' }}>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               員工編號
@@ -301,7 +245,7 @@ export default function CheckInPanel({ onCheckInSuccess }) {
                   <div className="text-center mb-4">
                     <div className="text-6xl mb-3">🎉</div>
                     <div className="text-2xl font-bold text-gray-800">
-                      恭喜 {queryResult.participantName}！
+                      恭喜 {formatWinnerName(queryResult.participantName, queryResult.participantCompany)}！
                     </div>
                     <div className="text-gray-600 mt-2">
                       工號: {queryResult.participantId}

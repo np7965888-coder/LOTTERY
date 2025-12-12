@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { DataProvider } from './contexts/DataContext';
 import CheckInPanel from './components/CheckInPanel';
 import AdminPanel from './components/AdminPanel';
 import DrawScreen from './components/DrawScreen';
@@ -94,8 +95,9 @@ function App() {
   };
 
   return (
-    <div className="App">
-      {showNavigation && (
+    <DataProvider>
+      <div className="App">
+        {showNavigation && (
         <div
           className="fixed top-0 left-0 right-0 z-30 flex justify-center"
           onMouseEnter={() => setIsNavHovered(true)}
@@ -148,7 +150,8 @@ function App() {
       )}
 
       {effectivePage === 'admin' && <AdminPanel />}
-    </div>
+      </div>
+    </DataProvider>
   );
 }
 

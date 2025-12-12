@@ -1,5 +1,5 @@
 // Google Apps Script Web App URL
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzm9mAgYYoa9rXAapoDwYnqUdS5S-X8BSpMk-l58BTzFyJa2ujqj2TDt6lpIfu7RGQzlA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyvsXyIC11p91_gRcP4GzPhhsy0hUAmap9jKJOmj4OjAl1xHCeF3bURlF0b0yl_1sCZ-g/exec';
 
 /**
  * 呼叫 Google Apps Script API
@@ -17,10 +17,15 @@ async function callGAS(action, data = {}, retryCount = 0) {
     // 將資料物件轉換為表單資料
     Object.keys(data).forEach(key => {
       if (data[key] !== undefined && data[key] !== null) {
-        if (typeof data[key] === 'object') {
-          // 物件和陣列轉為 JSON 字串
+        // 檢查是否為陣列或物件（排除 null，因為 typeof null === 'object'）
+        if (typeof data[key] === 'object' && !Array.isArray(data[key]) && data[key] !== null) {
+          // 純物件轉為 JSON 字串
+          formData.append(key, JSON.stringify(data[key]));
+        } else if (Array.isArray(data[key])) {
+          // 陣列轉為 JSON 字串
           formData.append(key, JSON.stringify(data[key]));
         } else {
+          // 字串、數字、布林值等直接轉為字串
           formData.append(key, String(data[key]));
         }
       }
