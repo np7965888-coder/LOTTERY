@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useData } from '../contexts/DataContext';
 
 // 格式化中獎者姓名顯示（非 TW 公司顯示「姓名(公司)」）
@@ -11,12 +11,19 @@ const formatWinnerName = (name, company) => {
 
 export default function CheckInPanel({ onCheckInSuccess }) {
   // 使用全局資料
-  const { winners, prizes, checkIn: checkInWithContext, dataLoaded, participants } = useData();
+  const { winners, prizes, checkIn: checkInWithContext, dataLoaded, participants, loadAllData, loading: globalLoading } = useData();
   
   const [participantId, setParticipantId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // 獨立報到頁面若尚未載入資料，嘗試自動下載一次
+  useEffect(() => {
+    if (!dataLoaded && !globalLoading) {
+      loadAllData();
+    }
+  }, [dataLoaded, globalLoading, loadAllData]);
   
   // 查詢中獎相關 state
   const [queryId, setQueryId] = useState('');
