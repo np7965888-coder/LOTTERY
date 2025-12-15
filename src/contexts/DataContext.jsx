@@ -249,7 +249,7 @@ export function DataProvider({ children }) {
     });
   }, [applyWinnersToParticipants]);
 
-  // 報到功能（優先立即上傳；離線/失敗則留待上傳）
+  // 報到功能（高速接收層：先寫入本地快取，後台批次同步到 Google Sheet）
   const checkIn = useCallback(async (participantId) => {
     // 先更新本地資料
     const participant = participants.find(p => String(p.id) === String(participantId));
@@ -257,7 +257,7 @@ export function DataProvider({ children }) {
       throw new Error(`找不到工號「${participantId}」的參與者`);
     }
 
-    // 如果已經報到，直接返回（不再重複上傳）
+    // 如果已經報到，直接返回
     if (participant.checked_in === 1) {
       return {
         success: true,
@@ -270,28 +270,19 @@ export function DataProvider({ children }) {
     const participantIdStr = String(participantId || '').trim();
     const now = new Date().toISOString();
 
-    // 先本地更新參與者狀態
+    // 高速接收層：立即更新本地狀態（快速回應使用者）
     updateParticipant(participantId, {
       checked_in: 1,
       checked_date: now
     });
 
-    // 嘗試立即上傳至伺服器
-    let uploadSucceeded = false;
-    try {
-      if (participantIdStr) {
-        await apiCheckIn(participantIdStr);
-        uploadSucceeded = true;
-      }
-    } catch (err) {
-      console.warn('⚠️ 即時上傳報到失敗，將加入待上傳隊列:', err?.message || err);
-    }
-
-    // 若上傳失敗，或無法判定，加入待上傳佇列
-    if (!uploadSucceeded && participantIdStr) {
+    // 加入待上傳佇列（由後台批次同步到 Google Sheet）
+    if (participantIdStr) {
       setPendingCheckIns(prev => {
+        // 檢查是否已存在（避免重複）
         const exists = prev.some(p => String(p.participantId) === participantIdStr);
         if (exists) return prev;
+        
         const updated = [...prev, { participantId: participantIdStr, timestamp: now }];
         try {
           localStorage.setItem(STORAGE_KEYS.PENDING_CHECKINS, JSON.stringify(updated));
@@ -300,23 +291,13 @@ export function DataProvider({ children }) {
         }
         return updated;
       });
-    } else if (uploadSucceeded && participantIdStr) {
-      // 確保若佇列裡已有同筆，移除
-      setPendingCheckIns(prev => {
-        const updated = prev.filter(p => String(p.participantId) !== participantIdStr);
-        try {
-          localStorage.setItem(STORAGE_KEYS.PENDING_CHECKINS, JSON.stringify(updated));
-        } catch (err) {
-          console.error('❌ 更新待上傳報到記錄失敗:', err);
-        }
-        return updated;
-      });
     }
 
+    // 立即返回成功（不等待 Google Sheet 寫入）
     return {
       success: true,
       name: participant.name,
-      message: uploadSucceeded ? '報到成功（已同步）' : '報到成功（待上傳）'
+      message: '報到成功'
     };
   }, [participants, updateParticipant]);
 
