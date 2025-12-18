@@ -76,6 +76,8 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
   const [currentPage, setCurrentPage] = useState(0);
   const [goldBorderProgress, setGoldBorderProgress] = useState(0); // 金色邊框動畫進度 (0-1)
   const [redrawCount, setRedrawCount] = useState(1); // 重抽次數
+  const [tempPrizeDrawCount, setTempPrizeDrawCount] = useState({}); // 臨時加碼：後綴流水號 {prize_id: count}
+  const [showResultScreen, setShowResultScreen] = useState(false); // quantity=0 特例：不抽人但切到抽獎結果畫面
   const animationCleanupRef = useRef(null);
   const backgroundCanvasRef = useRef(null);
   const animationFrameRef = useRef(null);
@@ -156,11 +158,114 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
   const getEligibleParticipants = (prize, allParticipants) => {
     if (!prize) return [];
     const prizeCompany = (prize.company || 'ALL').toString().trim().toUpperCase();
-    if (prizeCompany === 'ALL') return allParticipants;
-    return allParticipants.filter(p => {
+    const filteredByCompany = prizeCompany === 'ALL'
+      ? allParticipants
+      : allParticipants.filter(p => {
       const participantCompany = (p.company || '').toString().trim().toUpperCase();
       return participantCompany === prizeCompany;
     });
+
+    // 特定人員不可抽某些獎項（participants.exclude_prize_ids 以逗號分隔）
+    const prizeId = String(prize.prize_id || '').trim();
+    if (!prizeId) return filteredByCompany;
+    return filteredByCompany.filter(p => {
+      const raw = (p.exclude_prize_ids || '').toString().trim();
+      if (!raw) return true;
+      const blocked = raw
+        .split(/[,\s]+/g)
+        .map(s => s.trim())
+        .filter(Boolean);
+      return !blocked.includes(prizeId);
+    });
+  };
+
+  // 臨時加碼：Prize_Title 後綴 3 碼（用於區分每次按抽獎按鈕/重抽的中獎紀錄）
+  const getNextTempPrizeSuffix = (prizeId) => {
+    const currentCount = tempPrizeDrawCount[prizeId] || 0;
+    const nextCount = currentCount + 1;
+    setTempPrizeDrawCount(prev => ({ ...prev, [prizeId]: nextCount }));
+    return String(nextCount).padStart(3, '0'); // 001, 002...
+  };
+
+  const getPrizeTitleWithSuffix = (prize, suffix) => {
+    if (!suffix) return prize.prize_title;
+    return `${prize.prize_title}${suffix}`;
+  };
+
+  // quantity=0：在結果畫面用「重抽次數」當作抽獎數量，一次抽出 N 位
+  const drawTempPrizeFromResult = async () => {
+    if (!currentPrize || !isUnlimitedQuantity || isDrawing) return;
+
+    const quantity = Math.max(1, Math.min(100, redrawCount));
+    const suffix = getNextTempPrizeSuffix(currentPrize.prize_id);
+    const prizeTitleWithSuffix = getPrizeTitleWithSuffix(currentPrize, suffix);
+
+    setIsDrawing(true);
+    setShowResultScreen(true);
+    setCurrentWinner(null);
+    setBatchWinners([]);
+    setCurrentPage(0);
+
+    try {
+      const latestParticipants = getEligibleParticipants(currentPrize, participants);
+      const latestWinners = winners;
+
+      const excludedIds = new Set([
+        ...latestWinners
+          .filter(w => w.prize_id === currentPrize.prize_id)
+          .map(w => String(w.participant_id)),
+        ...participants
+          .filter(p => p.won === true || p.won === 'TRUE')
+          .map(p => String(p.id))
+      ]);
+
+      const selected = batchDraw(latestParticipants, excludedIds, quantity, false);
+
+      if (selected.length === 0) {
+        alert('沒有可抽選的參與者！');
+        setIsDrawing(false);
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const winnersList = selected.map(winner => ({
+        timestamp: now,
+        prize_id: currentPrize.prize_id,
+        prize_title: prizeTitleWithSuffix,
+        prize_name: currentPrize.prize_name,
+        participant_company: winner.company || '',
+        participant_id: winner.id,
+        participant_name: winner.name,
+        admin: 'system',
+        claimed: false
+      }));
+
+      addWinners(winnersList);
+      const winnerIds = new Set(selected.map(w => String(w.id)));
+      setParticipants(prev => prev.map(p =>
+        winnerIds.has(String(p.id))
+          ? { ...p, won: true }
+          : p
+      ));
+
+      setBatchWinners(selected);
+      setCurrentPage(0);
+      playWinSound();
+      const confettiCleanup = triggerConfetti();
+      if (confettiCleanup) {
+        setTimeout(() => {
+          if (confettiCleanup) confettiCleanup();
+        }, 3000);
+      }
+
+      setIsDrawing(false);
+      addPendingWinners(winnersList);
+      console.log(`📌 ${winnersList.length} 條臨時加碼記錄已添加到待上傳隊列，請在管理後台手動上傳`);
+    } catch (error) {
+      console.error('抽獎失敗:', error);
+      alert('抽獎失敗: ' + error.message);
+      setIsDrawing(false);
+    }
   };
 
   useEffect(() => {
@@ -215,6 +320,15 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
       // 檢查是否正在抽獎
       if (isDrawing) return;
 
+      // quantity=0：已進入結果畫面但尚未抽出任何人時，Space/Enter/2 直接等同按下「重抽」
+      if (showResultScreen && isUnlimitedQuantity && !currentWinner && batchWinners.length === 0) {
+        if (event.key === 'Enter' || event.key === ' ' || (event.key === '2' && isBatchMode)) {
+          event.preventDefault();
+          await drawTempPrizeFromResult();
+        }
+        return;
+      }
+
       // 檢查是否有中獎結果顯示（重抽模式）
       const hasWinnerResult = currentWinner || batchWinners.length > 0;
       
@@ -232,8 +346,9 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
             setDisplayName('');
             
             try {
+              const suffix = isUnlimitedQuantity && currentPrize ? getNextTempPrizeSuffix(currentPrize.prize_id) : null;
               for (let i = 0; i < count; i++) {
-                await handleSingleDraw();
+                await handleSingleDraw(suffix ? { suffix } : {});
                 if (i < count - 1) {
                   await new Promise(resolve => setTimeout(resolve, 4000));
                 }
@@ -273,9 +388,12 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                 return;
               }
               
+              const suffix = isUnlimitedQuantity ? getNextTempPrizeSuffix(currentPrize.prize_id) : null;
+              const prizeTitleWithSuffix = isUnlimitedQuantity ? getPrizeTitleWithSuffix(currentPrize, suffix) : currentPrize.prize_title;
+
               const winnersList = selected.map(winner => ({
                 prize_id: currentPrize.prize_id,
-                prize_title: currentPrize.prize_title,
+                prize_title: prizeTitleWithSuffix,
                 prize_name: currentPrize.prize_name,
                 participant_company: winner.company || '',
                 participant_id: winner.id,
@@ -351,7 +469,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
     return () => {
       window.removeEventListener('keydown', handleKeyPress);
     };
-  }, [currentPrize, isDrawing, isBatchMode, isUnlimitedQuantity, currentWinner, batchWinners, batchCount, participants, winners, prizes, redrawCount]);
+  }, [currentPrize, isDrawing, isBatchMode, isUnlimitedQuantity, showResultScreen, currentWinner, batchWinners, batchCount, participants, winners, prizes, redrawCount]);
 
   const initBackgroundAnimation = () => {
     const canvas = backgroundCanvasRef.current;
@@ -920,8 +1038,18 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
     return () => cancelAnimationFrame(animationId);
   };
 
-  const handleSingleDraw = async () => {
+  const handleSingleDraw = async (options = {}) => {
     if (!currentPrize || isDrawing || isBatchMode) return;
+
+    // quantity=0 特例：不抽獎，直接切到抽獎結果畫面
+    if (isUnlimitedQuantity) {
+      setShowResultScreen(true);
+      setCurrentWinner(null);
+      setBatchWinners([]);
+      setCurrentPage(0);
+      setDisplayName('');
+      return;
+    }
 
     setIsDrawing(true);
     setCurrentWinner(null);
@@ -959,11 +1087,14 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
 
     // 播放隨機數字動畫（純視覺效果，與抽獎邏輯完全分離）
     animationCleanupRef.current = randomNumberAnimation(winner, async () => {
+      const suffix = isUnlimitedQuantity ? (options.suffix || getNextTempPrizeSuffix(currentPrize.prize_id)) : null;
+      const prizeTitleWithSuffix = isUnlimitedQuantity ? getPrizeTitleWithSuffix(currentPrize, suffix) : currentPrize.prize_title;
+
       // 立即更新本地 state 並顯示結果（不等待 GAS 回應）
       const newWinner = {
         timestamp: new Date().toISOString(),
         prize_id: currentPrize.prize_id,
-        prize_title: currentPrize.prize_title,
+        prize_title: prizeTitleWithSuffix,
         prize_name: currentPrize.prize_name,
         participant_company: winner.company || '',
         participant_id: winner.id,
@@ -998,7 +1129,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
       const winnerData = {
         timestamp: new Date().toISOString(),
         prize_id: currentPrize.prize_id,
-        prize_title: currentPrize.prize_title,
+        prize_title: prizeTitleWithSuffix,
         prize_name: currentPrize.prize_name,
         participant_company: winner.company || '',
         participant_id: winner.id,
@@ -1014,6 +1145,16 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
 
   const handleBatchDraw = async () => {
     if (!currentPrize || isDrawing || !isBatchMode) return;
+
+    // quantity=0 特例：不抽獎，直接切到抽獎結果畫面
+    if (isUnlimitedQuantity) {
+      setShowResultScreen(true);
+      setCurrentWinner(null);
+      setBatchWinners([]);
+      setCurrentPage(0);
+      setDisplayName('');
+      return;
+    }
 
     setIsDrawing(true);
     setBatchWinners([]);
@@ -1045,10 +1186,14 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
       return;
     }
 
+    // 臨時加碼：每次按「開始抽獎」生成一個後綴，整批共用
+    const suffix = isUnlimitedQuantity ? getNextTempPrizeSuffix(currentPrize.prize_id) : null;
+    const prizeTitleWithSuffix = isUnlimitedQuantity ? getPrizeTitleWithSuffix(currentPrize, suffix) : currentPrize.prize_title;
+
     // 立即準備批次資料並更新本地 state（先顯示結果）
     const winnersList = selected.map(winner => ({
       prize_id: currentPrize.prize_id,
-      prize_title: currentPrize.prize_title,
+      prize_title: prizeTitleWithSuffix,
       prize_name: currentPrize.prize_name,
       participant_company: winner.company || '',
       participant_id: winner.id,
@@ -1195,7 +1340,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
           </div>
         )}
         
-        {!isLoading && dataLoaded && !isDrawing && !currentWinner && batchWinners.length === 0 && (
+        {!isLoading && dataLoaded && !isDrawing && !currentWinner && batchWinners.length === 0 && !showResultScreen && (
           <div className="flex-1 flex flex-col h-full w-full">
             {noPrizes ? (
               <div className="flex-1 flex items-center justify-center">
@@ -1435,7 +1580,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
         )}
 
         {/* 抽獎動畫顯示區域 */}
-        {!isLoading && (isDrawing || currentWinner || batchWinners.length > 0) && (
+        {!isLoading && (isDrawing || currentWinner || batchWinners.length > 0 || showResultScreen) && (
           <div className="flex-1 flex items-center justify-center w-full h-full relative">
             {/* 中獎結果背景化學式動畫 - 持續運行 */}
             <canvas
@@ -1448,6 +1593,42 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                 ? 'w-[90%] h-[90%] p-8 bg-gray-900/30 backdrop-blur-sm border-gray-600/50' 
                 : 'max-w-4xl w-full p-12 bg-gray-800/80 backdrop-blur-lg border-gray-700'
             }`}>
+            {showResultScreen && isUnlimitedQuantity && !isDrawing && !currentWinner && batchWinners.length === 0 && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="text-4xl font-bold drop-shadow-lg" style={{ color: '#FBC02D' }}>
+                  {currentPrize?.prize_title}
+                </div>
+                <div className="text-2xl text-gray-300">
+                  {currentPrize?.prize_name}
+                </div>
+                {/* 沿用原本結果畫面的「重抽」操作區塊（版型不變，只是這裡也要顯示） */}
+                <div className="mt-8 flex flex-col items-center gap-6 w-full">
+                  <div className="flex items-center gap-3 bg-gray-800/40 backdrop-blur-sm px-5 py-3 rounded-lg border border-gray-600/40">
+                    <label className="text-white text-sm font-semibold whitespace-nowrap opacity-80">
+                      重抽次數:
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={redrawCount}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 1;
+                        setRedrawCount(Math.max(1, Math.min(100, val)));
+                      }}
+                      className="w-16 px-2 py-1.5 text-center border border-gray-500 rounded-md bg-white text-gray-800 font-semibold text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                    <button
+                      onClick={drawTempPrizeFromResult}
+                      disabled={isDrawing}
+                      className="px-6 py-2 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-500 hover:to-orange-600 text-white font-semibold text-base rounded-lg transition shadow-md border border-orange-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      🔄 重抽
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             {isDrawing && !isBatchMode && (
               <div className="space-y-8">
                 <div className="text-4xl font-bold mb-4 drop-shadow-lg" style={{ color: '#FBC02D' }}>
@@ -1556,6 +1737,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                       setCurrentWinner(null);
                       setDisplayName('');
                       setRedrawCount(1);
+                      setShowResultScreen(false);
                     }}
                     className="px-16 py-5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold text-3xl rounded-xl transition shadow-2xl border-2 border-blue-400/50 hover:scale-105"
                   >
@@ -1590,8 +1772,9 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                         
                         try {
                           // 直接重新抽選指定次數（不移除當前中獎記錄）
+                          const suffix = isUnlimitedQuantity && currentPrize ? getNextTempPrizeSuffix(currentPrize.prize_id) : null;
                           for (let i = 0; i < count; i++) {
-                            await handleSingleDraw();
+                            await handleSingleDraw(suffix ? { suffix } : {});
                             // 如果不是最後一次，等待結果顯示後再繼續
                             if (i < count - 1) {
                               await new Promise(resolve => setTimeout(resolve, 4000));
@@ -1705,6 +1888,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                         setBatchWinners([]);
                         setCurrentPage(0);
                         setRedrawCount(1);
+                        setShowResultScreen(false);
                       }}
                       className="px-20 py-5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold text-3xl rounded-xl transition shadow-2xl border-2 border-blue-400/50 hover:scale-105"
                     >
@@ -1762,10 +1946,13 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                               return;
                             }
                             
+                            const suffix = isUnlimitedQuantity ? getNextTempPrizeSuffix(currentPrize.prize_id) : null;
+                            const prizeTitleWithSuffix = isUnlimitedQuantity ? getPrizeTitleWithSuffix(currentPrize, suffix) : currentPrize.prize_title;
+
                             // 準備批次資料並更新本地 state
                             const winnersList = selected.map(winner => ({
                               prize_id: currentPrize.prize_id,
-                              prize_title: currentPrize.prize_title,
+                              prize_title: prizeTitleWithSuffix,
                               prize_name: currentPrize.prize_name,
                               participant_company: winner.company || '',
                               participant_id: winner.id,

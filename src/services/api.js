@@ -1,5 +1,5 @@
 // Google Apps Script Web App URL
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbyvsXyIC11p91_gRcP4GzPhhsy0hUAmap9jKJOmj4OjAl1xHCeF3bURlF0b0yl_1sCZ-g/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzJfbPUbrjgretU4sa29Xqf69eleYew-SrAjofolV9dGQlv15Z0QHvg0piAM9XFpfUmng/exec';
 
 /**
  * 呼叫 Google Apps Script API

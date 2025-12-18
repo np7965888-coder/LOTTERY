@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useData } from '../contexts/DataContext';
 
 // 格式化中獎者姓名顯示（非 TW 公司顯示「姓名(公司)」）
@@ -11,12 +11,27 @@ const formatWinnerName = (name, company) => {
 
 export default function CheckInPanel({ onCheckInSuccess }) {
   // 使用全局資料
-  const { winners, prizes, checkIn: checkInWithContext, dataLoaded, participants, loadAllData, loading: globalLoading } = useData();
+  const { winners, prizes, checkIn: checkInWithContext, dataLoaded, participants, loadAllData, loading: globalLoading, checkInSettings } = useData();
   
   const [participantId, setParticipantId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // 報到開關與截止判斷
+  const now = useMemo(() => new Date(), []);
+  const deadlineDate = useMemo(() => {
+    if (!checkInSettings?.deadline) return null;
+    const d = new Date(checkInSettings.deadline);
+    return isNaN(d.getTime()) ? null : d;
+  }, [checkInSettings]);
+  const isCheckInOpen = useMemo(() => {
+    if (!checkInSettings?.enabled) return false;
+    if (deadlineDate) {
+      return now <= deadlineDate;
+    }
+    return true;
+  }, [checkInSettings, deadlineDate, now]);
 
   // 獨立報到頁面若尚未載入資料，嘗試自動下載一次
   useEffect(() => {
@@ -138,7 +153,7 @@ export default function CheckInPanel({ onCheckInSuccess }) {
         </h1>
         
         {/* 資料未載入提示 */}
-        {!dataLoaded && (
+        {(!dataLoaded || !isCheckInOpen) && (
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded">
             <div className="flex">
               <div className="flex-shrink-0">
@@ -146,14 +161,23 @@ export default function CheckInPanel({ onCheckInSuccess }) {
               </div>
               <div className="ml-3">
                 <p className="text-sm text-yellow-700">
-                  <strong>資料尚未載入：</strong>請先在管理後台頁面下載資料後，才能進行報到。
+                  {!dataLoaded
+                    ? '資料尚未載入：請先在管理後台頁面下載資料後再進行報到。'
+                    : '報到已暫停或已逾截止時間，請洽工作人員。'}
                 </p>
               </div>
             </div>
           </div>
         )}
         
-        <form onSubmit={handleSubmit} className="space-y-4" style={{ opacity: dataLoaded ? 1 : 0.5, pointerEvents: dataLoaded ? 'auto' : 'none' }}>
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-4"
+          style={{
+            opacity: dataLoaded && isCheckInOpen ? 1 : 0.4,
+            pointerEvents: dataLoaded && isCheckInOpen ? 'auto' : 'none'
+          }}
+        >
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               員工編號

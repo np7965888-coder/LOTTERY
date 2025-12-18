@@ -117,6 +117,7 @@ npm run build
 - `won` - 是否中獎 (TRUE/FALSE)
 - `checked_date` - 報到時間
 - `notes` - 備註
+- `exclude_prize_ids` - 不可抽的獎項 prize_id（逗號分隔，如：`P001,P003`）
 
 ### 2. prizes (獎項)
 - `prize_id` - 流水碼

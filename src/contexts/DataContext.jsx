@@ -19,7 +19,8 @@ const STORAGE_KEYS = {
   DATA_LOADED: 'lottery_data_loaded',
   DATA_LOADED_TIMESTAMP: 'lottery_data_loaded_timestamp',
   PENDING_CHECKINS: 'lottery_pending_checkins',
-  PENDING_WINNERS: 'lottery_pending_winners'
+  PENDING_WINNERS: 'lottery_pending_winners',
+  CHECKIN_SETTINGS: 'lottery_checkin_settings'
 };
 
 export function DataProvider({ children }) {
@@ -75,6 +76,14 @@ export function DataProvider({ children }) {
       return [];
     }
   });
+  const [checkInSettings, setCheckInSettings] = useState(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.CHECKIN_SETTINGS);
+      return stored ? JSON.parse(stored) : { enabled: true, deadline: '' };
+    } catch {
+      return { enabled: true, deadline: '' };
+    }
+  });
 
   // 將中獎紀錄同步到參與者的 won 狀態
   const applyWinnersToParticipants = useCallback((participantsList, winnersList) => {
@@ -95,15 +104,18 @@ export function DataProvider({ children }) {
       const storedParticipants = localStorage.getItem(STORAGE_KEYS.PARTICIPANTS);
       const storedPrizes = localStorage.getItem(STORAGE_KEYS.PRIZES);
       const storedWinners = localStorage.getItem(STORAGE_KEYS.WINNERS);
+      const storedCheckInSettings = localStorage.getItem(STORAGE_KEYS.CHECKIN_SETTINGS);
 
       const participantsData = storedParticipants ? JSON.parse(storedParticipants) : [];
       const prizesData = storedPrizes ? JSON.parse(storedPrizes) : [];
       const winnersData = storedWinners ? JSON.parse(storedWinners) : [];
+      const settingsData = storedCheckInSettings ? JSON.parse(storedCheckInSettings) : { enabled: true, deadline: '' };
 
       const participantsWithWon = applyWinnersToParticipants(participantsData, winnersData);
       setParticipants(participantsWithWon);
       setPrizes(prizesData);
       setWinners(winnersData);
+      setCheckInSettings(settingsData);
     } catch (err) {
       console.error('❌ 重新載入本地資料失敗:', err);
     }
@@ -124,6 +136,19 @@ export function DataProvider({ children }) {
     } catch (err) {
       console.error('❌ 讀取待上傳中獎記錄失敗:', err);
     }
+  }, []);
+
+  // 更新報到設定（不依賴 Google Sheet）
+  const updateCheckInSettings = useCallback((updates) => {
+    setCheckInSettings(prev => {
+      const next = { ...prev, ...updates };
+      try {
+        localStorage.setItem(STORAGE_KEYS.CHECKIN_SETTINGS, JSON.stringify(next));
+      } catch (err) {
+        console.error('❌ 保存報到設定失敗:', err);
+      }
+      return next;
+    });
   }, []);
 
   // 保存資料到 localStorage
@@ -533,6 +558,8 @@ export function DataProvider({ children }) {
     uploadPendingWinners,
     refreshLocalData,
     refreshPendingQueues,
+    checkInSettings,
+    updateCheckInSettings,
     clearPendingWinners
   };
 

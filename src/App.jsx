@@ -24,6 +24,18 @@ function App() {
     if (mode === 'admin') return 'admin';
     return 'checkin';
   });
+  // 簡易密碼保護（非 checkin-only 模式）
+  const PASSWORD_KEY = 'app_password_ok';
+  const PASSCODE = 'Np74229304@';
+  const [passInput, setPassInput] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [isAuthed, setIsAuthed] = useState(() => {
+    try {
+      return localStorage.getItem(PASSWORD_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isNavHovered, setIsNavHovered] = useState(false);
 
@@ -40,6 +52,20 @@ function App() {
     setIsFullscreen(false);
     if (document.fullscreenElement) {
       document.exitFullscreen();
+    }
+  };
+
+  // 密碼提交
+  const handleSubmitPassword = (e) => {
+    e.preventDefault();
+    if (passInput === PASSCODE) {
+      setIsAuthed(true);
+      setAuthError('');
+      try {
+        localStorage.setItem(PASSWORD_KEY, 'true');
+      } catch {}
+    } else {
+      setAuthError('密碼錯誤');
     }
   };
 
@@ -93,6 +119,48 @@ function App() {
       setCurrentPage(page);
     }
   };
+
+  // 若為報到專屬模式，直接顯示報到頁
+  if (mode === 'checkin-only') {
+    return (
+      <DataProvider>
+        <CheckInPanel onCheckInSuccess={handleCheckInSuccess} />
+      </DataProvider>
+    );
+  }
+
+  // 其他頁面需密碼
+  if (!isAuthed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 p-4">
+        <div className="bg-white/95 shadow-2xl rounded-2xl p-8 w-full max-w-md">
+          <h1 className="text-2xl font-bold text-center mb-6 text-gray-800">系統存取</h1>
+          <form onSubmit={handleSubmitPassword} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">請輸入密碼</label>
+              <input
+                type="password"
+                value={passInput}
+                onChange={(e) => setPassInput(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Password"
+                autoFocus
+              />
+            </div>
+            {authError && (
+              <div className="text-red-600 text-sm">{authError}</div>
+            )}
+            <button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200"
+            >
+              確認
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <DataProvider>

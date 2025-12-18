@@ -18,6 +18,8 @@ export default function AdminPanel() {
     uploadPendingCheckIns,
     uploadPendingWinners,
     refreshPendingQueues,
+    checkInSettings,
+    updateCheckInSettings,
     clearPendingWinners
   } = useData();
   
@@ -28,6 +30,8 @@ export default function AdminPanel() {
   const [uploadingWinners, setUploadingWinners] = useState(false);
   const [uploadMessage, setUploadMessage] = useState({ type: '', text: '' });
   const [showClearPendingConfirm, setShowClearPendingConfirm] = useState(false);
+  const [localCheckInEnabled, setLocalCheckInEnabled] = useState(checkInSettings?.enabled ?? true);
+  const [localDeadline, setLocalDeadline] = useState(checkInSettings?.deadline || '');
 
   // 當分頁/視窗回到焦點或 localStorage 改變時，同步待上傳佇列
   useEffect(() => {
@@ -41,6 +45,12 @@ export default function AdminPanel() {
       window.removeEventListener('storage', syncPending);
     };
   }, [refreshPendingQueues]);
+
+  // 同步報到設定到本地表單
+  useEffect(() => {
+    setLocalCheckInEnabled(checkInSettings?.enabled ?? true);
+    setLocalDeadline(checkInSettings?.deadline || '');
+  }, [checkInSettings]);
 
   // 手動上傳待上傳的報到記錄
   const handleUploadCheckIns = async () => {
@@ -107,6 +117,24 @@ export default function AdminPanel() {
     });
     setTimeout(() => setUploadMessage({ type: '', text: '' }), 5000);
     setShowClearPendingConfirm(false);
+  };
+
+  // 更新報到設定（本地存儲，不讀取 Google Sheet）
+  const handleSaveCheckInSettings = () => {
+    updateCheckInSettings({
+      enabled: !!localCheckInEnabled,
+      deadline: localDeadline
+    });
+    setUploadMessage({ type: 'success', text: '已更新報到設定（本地）' });
+    setTimeout(() => setUploadMessage({ type: '', text: '' }), 4000);
+  };
+
+  const handleResetCheckInSettings = () => {
+    setLocalCheckInEnabled(true);
+    setLocalDeadline('');
+    updateCheckInSettings({ enabled: true, deadline: '' });
+    setUploadMessage({ type: 'info', text: '已重置報到設定' });
+    setTimeout(() => setUploadMessage({ type: '', text: '' }), 3000);
   };
 
   const handleFileImport = async (e) => {
@@ -295,6 +323,90 @@ export default function AdminPanel() {
             </div>
           </div>
         )}
+
+        {/* 報到設定（本地控制，不從 Google Sheet 讀取） */}
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-bold mb-4">報到設定（本地）</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 左側：設定區域 */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setLocalCheckInEnabled(!localCheckInEnabled)}
+                  className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                    localCheckInEnabled ? 'bg-blue-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                      localCheckInEnabled ? 'translate-x-9' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                <span className="text-sm font-medium text-gray-700">
+                  {localCheckInEnabled ? '報到開放' : '報到截止'}
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">報到截止時間（選填）</label>
+                <input
+                  type="datetime-local"
+                  value={localDeadline}
+                  onChange={(e) => setLocalDeadline(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded w-full"
+                />
+                <p className="text-xs text-gray-500 mt-1">留空表示不設定截止時間</p>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveCheckInSettings}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                >
+                  儲存設定
+                </button>
+                <button
+                  onClick={handleResetCheckInSettings}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition"
+                >
+                  重置
+                </button>
+              </div>
+            </div>
+
+            {/* 右側：狀態顯示區域 */}
+            <div className="flex flex-col gap-3">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">目前狀態</h3>
+                <div className="space-y-2 text-sm text-gray-700">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">報到功能：</span>
+                    <span>{checkInSettings?.enabled ? '🟢 啟用' : '🔴 停用'}</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="font-medium">截止時間：</span>
+                    <span className="break-words">
+                      {checkInSettings?.deadline 
+                        ? new Date(checkInSettings.deadline).toLocaleString('zh-TW', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
+                        : '未設定'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 bg-blue-50 p-3 rounded">
+                <strong>注意：</strong>此設定儲存在本機瀏覽器，不會從 Google Sheet 讀取或覆蓋。
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* 待上傳資料統計（即使為 0 也顯示，方便找到上傳/清除按鈕） */}
         <div className="bg-orange-50 border-l-4 border-orange-400 p-4 mb-6 rounded">
