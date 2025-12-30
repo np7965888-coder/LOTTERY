@@ -1,5 +1,5 @@
 // Google Apps Script Web App URL
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzJfbPUbrjgretU4sa29Xqf69eleYew-SrAjofolV9dGQlv15Z0QHvg0piAM9XFpfUmng/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwnWEAc9oJ7gEYnfplauNXXOEmq0WIPA86mhNWHCWIllSnZw-aJCy7IrfDpK4Mu6xsNJA/exec';
 
 /**
  * 呼叫 Google Apps Script API
@@ -241,6 +241,13 @@ export async function updateParticipant(participantId, updates) {
  */
 export async function importParticipants(participants) {
   return callGAS('importParticipants', { participants });
+}
+
+/**
+ * 新增獎項
+ */
+export async function appendPrize(prizeData) {
+  return callGAS('appendPrize', prizeData);
 }
 
 /**

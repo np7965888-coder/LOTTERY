@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getParticipants, getPrizes, getWinners, checkIn as apiCheckIn, appendWinner, appendWinners } from '../services/api';
+import { getParticipants, getPrizes, getWinners, checkIn as apiCheckIn, appendWinner, appendWinners, appendPrize } from '../services/api';
 
 const DataContext = createContext(null);
 
@@ -20,6 +20,7 @@ const STORAGE_KEYS = {
   DATA_LOADED_TIMESTAMP: 'lottery_data_loaded_timestamp',
   PENDING_CHECKINS: 'lottery_pending_checkins',
   PENDING_WINNERS: 'lottery_pending_winners',
+  PENDING_PRIZES: 'lottery_pending_prizes',
   CHECKIN_SETTINGS: 'lottery_checkin_settings'
 };
 
@@ -71,6 +72,14 @@ export function DataProvider({ children }) {
   const [pendingWinners, setPendingWinners] = useState(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.PENDING_WINNERS);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [pendingPrizes, setPendingPrizes] = useState(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.PENDING_PRIZES);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -135,6 +144,13 @@ export function DataProvider({ children }) {
       setPendingWinners(storedWinners ? JSON.parse(storedWinners) : []);
     } catch (err) {
       console.error('❌ 讀取待上傳中獎記錄失敗:', err);
+    }
+
+    try {
+      const storedPrizes = localStorage.getItem(STORAGE_KEYS.PENDING_PRIZES);
+      setPendingPrizes(storedPrizes ? JSON.parse(storedPrizes) : []);
+    } catch (err) {
+      console.error('❌ 讀取待上傳獎項記錄失敗:', err);
     }
   }, []);
 
@@ -276,6 +292,26 @@ export function DataProvider({ children }) {
 
   // 報到功能（高速接收層：先寫入本地快取，後台批次同步到 Google Sheet）
   const checkIn = useCallback(async (participantId) => {
+    // 檢查報到是否開放
+    if (!checkInSettings?.enabled) {
+      return {
+        success: false,
+        message: '報到功能已暫停，請洽工作人員'
+      };
+    }
+
+    // 檢查是否已過截止時間
+    if (checkInSettings?.deadline) {
+      const deadline = new Date(checkInSettings.deadline);
+      const now = new Date();
+      if (!isNaN(deadline.getTime()) && now > deadline) {
+        return {
+          success: false,
+          message: '報到時間已截止，請洽工作人員'
+        };
+      }
+    }
+
     // 先更新本地資料
     const participant = participants.find(p => String(p.id) === String(participantId));
     if (!participant) {
@@ -324,7 +360,7 @@ export function DataProvider({ children }) {
       name: participant.name,
       message: '報到成功'
     };
-  }, [participants, updateParticipant]);
+  }, [participants, updateParticipant, checkInSettings]);
 
   // 添加待上傳的中獎記錄（用於抽獎）
   const addPendingWinner = useCallback((winner) => {
@@ -538,6 +574,112 @@ export function DataProvider({ children }) {
     }
   }, []);
 
+  // 手動上傳待上傳的獎項
+  const uploadPendingPrizes = useCallback(async () => {
+    if (pendingPrizes.length === 0) {
+      return { success: true, message: '沒有待上傳的獎項記錄' };
+    }
+
+    const results = [];
+    const failed = [];
+    
+    for (const prize of pendingPrizes) {
+      try {
+        const result = await appendPrize(prize);
+        if (result.success) {
+          results.push(prize);
+          // 如果 Google Sheet 返回了新的 prize_id，更新本地數據
+          if (result.prize_id && result.prize_id !== prize.prize_id) {
+            setPrizes(prev => {
+              const updated = prev.map(p => 
+                p.prize_id === prize.prize_id 
+                  ? { ...p, prize_id: result.prize_id }
+                  : p
+              );
+              try {
+                localStorage.setItem(STORAGE_KEYS.PRIZES, JSON.stringify(updated));
+              } catch (err) {
+                console.error('❌ 更新獎項 ID 到 localStorage 失敗:', err);
+              }
+              return updated;
+            });
+          }
+        } else {
+          failed.push(prize);
+        }
+      } catch (error) {
+        console.error(`❌ 上傳獎項失敗 (${prize.prize_title}):`, error);
+        failed.push(prize);
+      }
+    }
+
+    // 移除成功上傳的記錄
+    if (results.length > 0) {
+      setPendingPrizes(prev => {
+        const updated = prev.filter(p => !results.some(r => r.prize_id === p.prize_id));
+        try {
+          localStorage.setItem(STORAGE_KEYS.PENDING_PRIZES, JSON.stringify(updated));
+        } catch (err) {
+          console.error('❌ 更新待上傳獎項記錄失敗:', err);
+        }
+        return updated;
+      });
+    }
+
+    return {
+      success: failed.length === 0,
+      uploaded: results.length,
+      failed: failed.length,
+      message: failed.length === 0 
+        ? `成功上傳 ${results.length} 條獎項記錄`
+        : `成功上傳 ${results.length} 條，失敗 ${failed.length} 條`
+    };
+  }, [pendingPrizes]);
+
+  // 添加臨時獎項（用於臨時加碼）
+  const addPrize = useCallback((prizeData) => {
+    // 先創建新獎項對象
+    const newPrize = {
+      ...prizeData,
+      prize_id: prizeData.prize_id || `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      quantity: prizeData.quantity !== undefined ? Number(prizeData.quantity) : 0, // 確保是數字類型
+      mode: prizeData.mode || 'temp' // 臨時加碼模式
+    };
+
+    // 更新本地 state
+    setPrizes(prev => {
+      // 計算 order
+      newPrize.order = prizeData.order !== undefined ? prizeData.order : (prev.length > 0 ? Math.max(...prev.map(p => p.order || 0)) + 1 : 1);
+      
+      const updated = [...prev, newPrize];
+      // 更新 localStorage
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRIZES, JSON.stringify(updated));
+      } catch (err) {
+        console.error('❌ 更新獎項到 localStorage 失敗:', err);
+      }
+      return updated;
+    });
+
+    // 添加到待上傳隊列
+    setPendingPrizes(prev => {
+      // 檢查是否已存在（避免重複）
+      const exists = prev.some(p => p.prize_id === newPrize.prize_id);
+      if (exists) return prev;
+      
+      const updated = [...prev, newPrize];
+      try {
+        localStorage.setItem(STORAGE_KEYS.PENDING_PRIZES, JSON.stringify(updated));
+      } catch (err) {
+        console.error('❌ 保存待上傳獎項記錄失敗:', err);
+      }
+      return updated;
+    });
+    
+    console.log('📌 獎項已添加到待上傳隊列，請在管理後台手動上傳');
+    return newPrize; // 返回新創建的獎項
+  }, []);
+
   const value = {
     participants,
     prizes,
@@ -552,15 +694,18 @@ export function DataProvider({ children }) {
     checkIn,
     pendingCheckIns,
     pendingWinners,
+    pendingPrizes,
     addPendingWinner,
     addPendingWinners,
     uploadPendingCheckIns,
     uploadPendingWinners,
+    uploadPendingPrizes,
     refreshLocalData,
     refreshPendingQueues,
     checkInSettings,
     updateCheckInSettings,
-    clearPendingWinners
+    clearPendingWinners,
+    addPrize
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

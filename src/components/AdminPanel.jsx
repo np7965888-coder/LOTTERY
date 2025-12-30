@@ -15,8 +15,10 @@ export default function AdminPanel() {
     loadAllData,
     pendingCheckIns,
     pendingWinners,
+    pendingPrizes,
     uploadPendingCheckIns,
     uploadPendingWinners,
+    uploadPendingPrizes,
     refreshPendingQueues,
     checkInSettings,
     updateCheckInSettings,
@@ -28,6 +30,7 @@ export default function AdminPanel() {
   const [filterCheckedIn, setFilterCheckedIn] = useState('all');
   const [uploadingCheckIns, setUploadingCheckIns] = useState(false);
   const [uploadingWinners, setUploadingWinners] = useState(false);
+  const [uploadingPrizes, setUploadingPrizes] = useState(false);
   const [uploadMessage, setUploadMessage] = useState({ type: '', text: '' });
   const [showClearPendingConfirm, setShowClearPendingConfirm] = useState(false);
   const [localCheckInEnabled, setLocalCheckInEnabled] = useState(checkInSettings?.enabled ?? true);
@@ -101,6 +104,32 @@ export default function AdminPanel() {
       setTimeout(() => setUploadMessage({ type: '', text: '' }), 5000);
     } finally {
       setUploadingWinners(false);
+    }
+  };
+
+  // 手動上傳待上傳的獎項記錄
+  const handleUploadPrizes = async () => {
+    if (pendingPrizes.length === 0) {
+      setUploadMessage({ type: 'info', text: '沒有待上傳的獎項記錄' });
+      setTimeout(() => setUploadMessage({ type: '', text: '' }), 3000);
+      return;
+    }
+
+    setUploadingPrizes(true);
+    setUploadMessage({ type: 'info', text: `正在上傳 ${pendingPrizes.length} 條獎項記錄...` });
+    
+    try {
+      const result = await uploadPendingPrizes();
+      setUploadMessage({ 
+        type: result.success ? 'success' : 'warning', 
+        text: result.message 
+      });
+      setTimeout(() => setUploadMessage({ type: '', text: '' }), 5000);
+    } catch (error) {
+      setUploadMessage({ type: 'error', text: '上傳失敗: ' + error.message });
+      setTimeout(() => setUploadMessage({ type: '', text: '' }), 5000);
+    } finally {
+      setUploadingPrizes(false);
     }
   };
 
@@ -418,6 +447,7 @@ export default function AdminPanel() {
               <div className="text-sm text-orange-700 space-y-1">
                 <div>📋 報到記錄: {pendingCheckIns.length} 條</div>
                 <div>🎁 中獎記錄: {pendingWinners.length} 條</div>
+                <div>🎯 獎項記錄: {pendingPrizes.length} 條</div>
               </div>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -443,6 +473,18 @@ export default function AdminPanel() {
                 }`}
               >
                 {uploadingWinners ? '上傳中...' : `上傳中獎記錄 (${pendingWinners.length})`}
+              </button>
+
+              <button
+                onClick={handleUploadPrizes}
+                disabled={uploadingPrizes || pendingPrizes.length === 0}
+                className={`px-4 py-2 rounded-lg font-semibold transition ${
+                  uploadingPrizes || pendingPrizes.length === 0
+                    ? 'bg-gray-400 text-white cursor-not-allowed'
+                    : 'bg-purple-600 text-white hover:bg-purple-700'
+                }`}
+              >
+                {uploadingPrizes ? '上傳中...' : `上傳獎項記錄 (${pendingPrizes.length})`}
               </button>
 
               <button

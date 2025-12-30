@@ -57,7 +57,7 @@ const CHEMICAL_FORMULAS = [
 
 export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
   // 使用全局資料
-  const { participants: contextParticipants, prizes, winners, loading: isLoading, dataLoaded, addWinner, addWinners, addPendingWinner, addPendingWinners, loadAllData, addPrize } = useData();
+  const { participants: contextParticipants, prizes, winners, loading: isLoading, dataLoaded, addWinner, addWinners, addPendingWinner, addPendingWinners, loadAllData } = useData();
   
   // 使用本地 participants state（從 context 初始化，用於更新 won 狀態）
   const [participants, setParticipants] = useState(contextParticipants);
@@ -78,10 +78,6 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
   const [redrawCount, setRedrawCount] = useState(1); // 重抽次數
   const [tempPrizeDrawCount, setTempPrizeDrawCount] = useState({}); // 臨時加碼：後綴流水號 {prize_id: count}
   const [showResultScreen, setShowResultScreen] = useState(false); // quantity=0 特例：不抽人但切到抽獎結果畫面
-  const [showTempPrizeModal, setShowTempPrizeModal] = useState(false); // 顯示臨時加碼彈窗
-  const [tempPrizeForm, setTempPrizeForm] = useState({ prize_title: '臨時加碼', prize_name: '001', company: 'ALL', mode: 'batch', quantity: 1 }); // 臨時加碼表單
-  const [tempPrizeCounter, setTempPrizeCounter] = useState(1); // 臨時加碼流水號計數器
-  const [isRedrawDisabled, setIsRedrawDisabled] = useState(false); // 重抽按鈕是否禁用（5秒冷卻）
   const animationCleanupRef = useRef(null);
   const backgroundCanvasRef = useRef(null);
   const animationFrameRef = useRef(null);
@@ -127,7 +123,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
   const prizeMode = currentPrize?.mode || 'single';
   const isBatchMode = prizeMode === 'batch';
   const isSinglePrize = prizeMode === 'single';
-  const isUnlimitedQuantity = Number(currentPrize?.quantity) === 0;
+  const isUnlimitedQuantity = currentPrize?.quantity === 0;
   const maxBatchCount = currentPrize ? (isBatchMode ? Math.max(currentPrizeRemaining, 1) : 1) : 1;
   const canDraw = !!currentPrize && (isUnlimitedQuantity || currentPrizeRemaining > 0) && !isDrawing && (!isBatchMode || batchCount > 0);
   const noPrizes = sortedPrizes.length === 0;
@@ -261,10 +257,6 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
           if (confettiCleanup) confettiCleanup();
         }, 3000);
       }
-
-      // 進入抽獎結果畫面時，禁用重抽按鈕 5 秒
-      setIsRedrawDisabled(true);
-      setTimeout(() => setIsRedrawDisabled(false), 5000);
 
       setIsDrawing(false);
       addPendingWinners(winnersList);
@@ -444,10 +436,10 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
       }
 
       // 沒有中獎結果，執行正常抽獎邏輯
-      const canDrawCheck = currentPrize && !isDrawing && 
-                           (isUnlimitedQuantity || getRemaining(currentPrize) > 0);
+      const canDraw = currentPrize && !isDrawing && 
+                      (isUnlimitedQuantity || getRemaining(currentPrize) > 0);
       
-      if (!canDrawCheck) return;
+      if (!canDraw) return;
 
       // Enter 鍵或 Space 鍵 - 開始抽獎
       if (event.key === 'Enter' || event.key === ' ') {
@@ -1130,10 +1122,6 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
         }, 3000);
       }
 
-      // 進入抽獎結果畫面時，禁用重抽按鈕 5 秒
-      setIsRedrawDisabled(true);
-      setTimeout(() => setIsRedrawDisabled(false), 5000);
-
       setIsDrawing(false);
       animationCleanupRef.current = null;
 
@@ -1241,10 +1229,6 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
       }, 3000);
     }
 
-    // 進入抽獎結果畫面時，禁用重抽按鈕 5 秒
-    setIsRedrawDisabled(true);
-    setTimeout(() => setIsRedrawDisabled(false), 5000);
-
     setIsDrawing(false);
 
     // 添加到待上傳隊列（不自動上傳，需在管理後台手動上傳）
@@ -1261,90 +1245,6 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
     } else {
       document.exitFullscreen();
     }
-  };
-
-  // 快速添加臨時加碼獎項
-  const handleAddTempPrize = () => {
-    if (!tempPrizeForm.prize_title.trim() || !tempPrizeForm.prize_name.trim()) {
-      alert('請填寫獎項標題和獎品名稱');
-      return;
-    }
-
-    const quantity = parseInt(tempPrizeForm.quantity) || 1;
-    if (quantity < 1) {
-      alert('數量必須大於 0');
-      return;
-    }
-
-    const newPrizeData = {
-      prize_title: tempPrizeForm.prize_title.trim(),
-      prize_name: tempPrizeForm.prize_name.trim(),
-      company: tempPrizeForm.company || 'ALL',
-      mode: tempPrizeForm.mode || 'batch', // 使用表單選擇的模式
-      quantity: quantity, // 使用輸入的數量
-      order: sortedPrizes.length > 0 ? Math.max(...sortedPrizes.map(p => p.order || 0)) + 1 : 1
-    };
-
-    const createdPrize = addPrize(newPrizeData);
-    
-    // 使用 setTimeout 確保 state 更新完成後再設置 currentPrize
-    setTimeout(() => {
-      setCurrentPrize(createdPrize);
-    }, 0);
-    
-    setShowTempPrizeModal(false);
-    
-    // 流水號 +1，並更新表單的下一個流水號
-    const nextCounter = tempPrizeCounter + 1;
-    setTempPrizeCounter(nextCounter);
-    setTempPrizeForm({ 
-      prize_title: '臨時加碼', 
-      prize_name: String(nextCounter).padStart(3, '0'), 
-      company: 'ALL', 
-      mode: 'batch',
-      quantity: 1
-    });
-    
-    alert('臨時加碼獎項已添加！請在管理後台上傳。');
-  };
-
-  // 打開臨時加碼彈窗時，自動填入標題和流水號
-  const handleOpenTempPrizeModal = () => {
-    setTempPrizeForm({
-      prize_title: '臨時加碼',
-      prize_name: String(tempPrizeCounter).padStart(3, '0'),
-      company: 'ALL',
-      mode: 'batch',
-      quantity: 1
-    });
-    setShowTempPrizeModal(true);
-  };
-
-  // 快速添加參加獎
-  const handleAddParticipationPrize = () => {
-    // 計算未中獎的人數
-    const notWonCount = participants.filter(p => {
-      const won = p.won === true || p.won === 'TRUE';
-      return !won;
-    }).length;
-
-    const newPrizeData = {
-      prize_title: '參加獎',
-      prize_name: '參加獎',
-      company: 'ALL',
-      mode: 'batch', // 使用批次模式
-      quantity: notWonCount, // 自動設置為未中獎人數
-      order: sortedPrizes.length > 0 ? Math.max(...sortedPrizes.map(p => p.order || 0)) + 1 : 1
-    };
-
-    const createdPrize = addPrize(newPrizeData);
-    
-    // 使用 setTimeout 確保 state 更新完成後再設置 currentPrize
-    setTimeout(() => {
-      setCurrentPrize(createdPrize);
-    }, 0);
-    
-    alert(`參加獎已添加！共 ${notWonCount} 名未中獎者。請在管理後台上傳。`);
   };
 
   return (
@@ -1504,56 +1404,6 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                             </span>
                           </button>
                           <button
-                            onClick={handleOpenTempPrizeModal}
-                            className="px-2 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white font-bold rounded-l-lg transition-all duration-300 relative z-[100] border border-green-500/50 shadow-lg pointer-events-auto overflow-hidden whitespace-nowrap group"
-                            style={{ 
-                              position: 'relative', 
-                              zIndex: 100,
-                              width: '2rem',
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.width = 'auto';
-                              e.currentTarget.style.paddingRight = '1rem';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.width = '2rem';
-                              e.currentTarget.style.paddingRight = '0.5rem';
-                            }}
-                            title="臨時加碼（10秒快速添加）"
-                          >
-                            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                              臨時加碼
-                            </span>
-                            <span className="absolute right-2 top-1/2 -translate-y-1/2 group-hover:opacity-0 opacity-100 transition-opacity duration-300">
-                              ⚡
-                            </span>
-                          </button>
-                          <button
-                            onClick={handleAddParticipationPrize}
-                            className="px-2 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white font-bold rounded-l-lg transition-all duration-300 relative z-[100] border border-purple-500/50 shadow-lg pointer-events-auto overflow-hidden whitespace-nowrap group"
-                            style={{ 
-                              position: 'relative', 
-                              zIndex: 100,
-                              width: '2rem',
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.width = 'auto';
-                              e.currentTarget.style.paddingRight = '1rem';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.width = '2rem';
-                              e.currentTarget.style.paddingRight = '0.5rem';
-                            }}
-                            title="添加參加獎（未中獎的人人有獎）"
-                          >
-                            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                              參加獎
-                            </span>
-                            <span className="absolute right-2 top-1/2 -translate-y-1/2 group-hover:opacity-0 opacity-100 transition-opacity duration-300">
-                              🎁
-                            </span>
-                          </button>
-                          <button
                             onClick={handleFullscreen}
                             className="px-2 py-3 bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-white font-bold rounded-l-lg transition-all duration-300 relative z-[100] border border-yellow-500/50 shadow-lg pointer-events-auto overflow-hidden whitespace-nowrap group"
                             style={{ 
@@ -1640,7 +1490,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                             filter: 'drop-shadow(0 0 4px rgba(251, 192, 45, 0.4))',
                           }}
                         >
-                          {Number(currentPrize.quantity) === 0 ? '無上限' : `${currentPrize.quantity} 名`}
+                          {currentPrize.quantity === 0 ? '無上限' : `${currentPrize.quantity} 名`}
                         </div>
                         {!isUnlimitedQuantity && currentPrizeRemaining === 0 && (
                           <div className="text-2xl text-red-400 mt-4 font-semibold">
@@ -1769,11 +1619,8 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                       className="w-16 px-2 py-1.5 text-center border border-gray-500 rounded-md bg-white text-gray-800 font-semibold text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                     />
                     <button
-                      onClick={() => {
-                        if (isRedrawDisabled) return;
-                        drawTempPrizeFromResult();
-                      }}
-                      disabled={isDrawing || isRedrawDisabled}
+                      onClick={drawTempPrizeFromResult}
+                      disabled={isDrawing}
                       className="px-6 py-2 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-500 hover:to-orange-600 text-white font-semibold text-base rounded-lg transition shadow-md border border-orange-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       🔄 重抽
@@ -1808,12 +1655,21 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
 
             {currentWinner && !isDrawing && (
               <div className="space-y-8 animate-fade-in">
+                {/* 部門 */}
+                <div className="text-3xl font-bold mb-2" style={{ color: '#FFFFFF', textShadow: '0 2px 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>
+                  部門: {currentWinner.department}
+                </div>
+                {/* 工號 */}
+                <div className="text-3xl font-bold mb-2" style={{ color: '#FFFFFF', textShadow: '0 2px 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>
+                  工號: {currentWinner.id}
+                </div>
                 {/* 根據 checked_in 狀態顯示不同顏色 */}
                 {currentWinner.checked_in === 2 || currentWinner.checked_in === 9 ? (
                   <>
                     <div
-                      className={`rounded-lg winner-name ${isSinglePrize ? 'gold-border-pulse' : ''}`}
+                      className={`text-7xl font-bold mb-6 drop-shadow-lg rounded-lg p-8 winner-name ${isSinglePrize ? 'gold-border-pulse' : ''}`}
                       style={{
+                        color: '#FFFFFF',
                         border: isSinglePrize 
                           ? `4px solid ${getGoldBorderColor(goldBorderProgress)}`
                           : '4px solid rgba(255, 255, 255, 0.25)',
@@ -1824,27 +1680,10 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                           0 0 35px rgba(59, 130, 246, 0.4),
                           0 8px 32px rgba(0, 0, 0, 0.6)
                         `,
+                        textShadow: '0 4px 16px rgba(0, 0, 0, 0.8)',
                       }}
                     >
-                      <div className="flex items-center">
-                        {/* 左半邊：部門工號 */}
-                        <div className="w-1/3 flex flex-col justify-center items-center px-8 py-12 border-r-4 border-gray-400/30">
-                          <div className="text-2xl font-bold text-gray-300 mb-3" style={{ textShadow: '0 2px 8px rgba(0, 0, 0, 0.8)' }}>部門</div>
-                          <div className="text-4xl font-black text-white mb-8" style={{ textShadow: '0 2px 12px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>{currentWinner.department}</div>
-                          <div className="text-2xl font-bold text-gray-300 mb-3" style={{ textShadow: '0 2px 8px rgba(0, 0, 0, 0.8)' }}>工號</div>
-                          <div className="text-4xl font-black text-white" style={{ textShadow: '0 2px 12px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>{currentWinner.id}</div>
-                        </div>
-                        {/* 右半邊：姓名 */}
-                        <div className="flex-1 flex flex-col justify-center items-center px-12 py-12">
-                          <div className="font-black mb-4 drop-shadow-lg" style={{
-                            color: '#FFFFFF',
-                            fontSize: '10rem',
-                            textShadow: '0 4px 20px rgba(0, 0, 0, 0.9), 0 0 30px rgba(255, 255, 255, 0.4)'
-                          }}>
-                            {formatWinnerName(currentWinner.name, currentWinner.company)}
-                          </div>
-                        </div>
-                      </div>
+                      {formatWinnerName(currentWinner.name, currentWinner.company)}
                     </div>
                     <div
                       className="text-2xl font-bold text-blue-200 mb-4 rounded-lg p-4 border"
@@ -1863,10 +1702,11 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                   </>
                 ) : (
                   <div 
-                    className={`rounded-lg winner-name ${isSinglePrize ? 'gold-border-pulse' : ''}`}
+                    className={`text-7xl font-bold mb-6 rounded-lg p-8 winner-name ${isSinglePrize ? 'gold-border-pulse' : ''}`}
                     style={{
+                      color: '#FFFFFF',
                       background: isSinglePrize 
-                        ? `linear-gradient(135deg, rgba(${Math.round(26 + (251 - 26) * goldBorderProgress)}, ${Math.round(26 + (192 - 26) * goldBorderProgress)}, ${Math.round(26 + (45 - 26) * goldBorderProgress)}, ${0.1 + goldBorderProgress * 0.15}), rgba(${Math.round(26 + (255 - 26) * goldBorderProgress)}, ${Math.round(215 - 26) * goldBorderProgress}, ${Math.round(0 - 26) * goldBorderProgress}, ${0.05 + goldBorderProgress * 0.1})}`
+                        ? `linear-gradient(135deg, rgba(${Math.round(26 + (251 - 26) * goldBorderProgress)}, ${Math.round(26 + (192 - 26) * goldBorderProgress)}, ${Math.round(26 + (45 - 26) * goldBorderProgress)}, ${0.1 + goldBorderProgress * 0.15}), rgba(${Math.round(26 + (255 - 26) * goldBorderProgress)}, ${Math.round(215 - 26) * goldBorderProgress}, ${Math.round(0 - 26) * goldBorderProgress}, ${0.05 + goldBorderProgress * 0.1}))`
                         : 'linear-gradient(135deg, rgba(251, 192, 45, 0.18), rgba(255, 215, 0, 0.12))',
                       border: isSinglePrize 
                         ? `4px solid ${getGoldBorderColor(goldBorderProgress)}`
@@ -1877,28 +1717,11 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                         inset 0 0 25px rgba(251, 192, 45, 0.2),
                         0 8px 32px rgba(0, 0, 0, 0.6)
                       `,
+                      textShadow: '0 4px 16px rgba(0, 0, 0, 0.8)',
                       filter: 'drop-shadow(0 0 12px rgba(251, 192, 45, 0.6))',
                     }}
                   >
-                    <div className="flex items-center">
-                      {/* 左半邊：部門工號 */}
-                      <div className="w-1/3 flex flex-col justify-center items-center px-8 py-12 border-r-4 border-yellow-400/30">
-                        <div className="text-2xl font-bold text-gray-300 mb-3" style={{ textShadow: '0 2px 8px rgba(0, 0, 0, 0.8)' }}>部門</div>
-                        <div className="text-4xl font-black text-white mb-8" style={{ textShadow: '0 2px 12px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>{currentWinner.department}</div>
-                        <div className="text-2xl font-bold text-gray-300 mb-3" style={{ textShadow: '0 2px 8px rgba(0, 0, 0, 0.8)' }}>工號</div>
-                        <div className="text-4xl font-black text-white" style={{ textShadow: '0 2px 12px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>{currentWinner.id}</div>
-                      </div>
-                      {/* 右半邊：姓名 */}
-                      <div className="flex-1 flex flex-col justify-center items-center px-12 py-12">
-                        <div className="font-black mb-4 drop-shadow-lg" style={{
-                          color: '#FFFFFF',
-                          fontSize: '10rem',
-                          textShadow: '0 4px 20px rgba(0, 0, 0, 0.9), 0 0 30px rgba(255, 255, 255, 0.4)'
-                        }}>
-                          {formatWinnerName(currentWinner.name, currentWinner.company)}
-                        </div>
-                      </div>
-                    </div>
+                    {formatWinnerName(currentWinner.name, currentWinner.company)}
                   </div>
                 )}
                 <div className="text-3xl font-bold mb-2" style={{ color: '#FFFFFF', textShadow: '0 2px 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>
@@ -1939,7 +1762,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                     />
                     <button
                       onClick={async () => {
-                        if (!currentWinner || isDrawing || isRedrawDisabled) return;
+                        if (!currentWinner || isDrawing) return;
                         
                         const count = Math.max(1, Math.min(10, redrawCount));
                         
@@ -1963,7 +1786,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                           setIsDrawing(false);
                         }
                       }}
-                      disabled={isDrawing || isRedrawDisabled}
+                      disabled={isDrawing}
                       className="px-6 py-2 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-500 hover:to-orange-600 text-white font-semibold text-base rounded-lg transition shadow-md border border-orange-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       🔄 重抽
@@ -2012,7 +1835,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                     </button>
                     
                     <div className="flex-1 h-full flex flex-col min-h-0">
-                      <div className="flex flex-wrap justify-center gap-6 flex-1 min-h-0 content-start">
+                      <div className="grid grid-cols-2 gap-6 flex-1 min-h-0">
                         {currentPageWinners.map((winner, idx) => {
                           const actualIndex = startIndex + idx;
                           // 根據 checked_in 狀態決定樣式
@@ -2020,38 +1843,21 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                           return (
                             <div
                               key={actualIndex}
-                              className={`rounded-lg border shadow-lg ${
+                              className={`rounded-lg p-6 border shadow-lg ${
                                 isAbsent 
                                   ? 'bg-gray-700/60 border-gray-600/50 text-white' 
                                   : 'bg-blue-900/60 border-blue-500/60 text-blue-200'
                               }`}
-                              style={{ width: 'calc(50% - 12px)', minWidth: '500px', maxWidth: '700px' }}
                             >
-                              <div className="flex items-center h-full">
-                                {/* 左半邊：部門工號 */}
-                                <div className="w-1/3 flex flex-col justify-center items-center px-4 py-6 border-r border-gray-500/40">
-                                  <div className="text-lg text-gray-300 mb-2 text-center">部門</div>
-                                  <div className="text-xl font-semibold text-blue-200 mb-4 text-center">{winner.department}</div>
-                                  <div className="text-lg text-gray-300 mb-2 text-center">工號</div>
-                                  <div className="text-xl font-semibold text-blue-200 text-center">{winner.id}</div>
+                              <div className="text-base text-gray-300 mb-2">部門: {winner.department}</div>
+                              <div className="text-base text-gray-300 mb-3">工號: {winner.id}</div>
+                              <div className="text-4xl font-bold mb-3 drop-shadow">{formatWinnerName(winner.name, winner.company)}</div>
+                              {isAbsent && (
+                                <div className="text-base font-bold text-blue-200 mb-2">
+                                  ⚠️ 不需上台領獎
+                                  {winner.checked_in === 2 ? '（公差無法到場）' : '（因公未到）'}
                                 </div>
-                                {/* 右半邊：姓名 */}
-                                <div className="flex-1 flex flex-col justify-center items-center px-6 py-6">
-                                  <div className="font-black mb-2 drop-shadow-lg" style={{
-                                    color: '#FFFFFF',
-                                    fontSize: '4.5rem',
-                                    textShadow: '0 4px 12px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.3)'
-                                  }}>
-                                    {formatWinnerName(winner.name, winner.company)}
-                                  </div>
-                                  {isAbsent && (
-                                    <div className="text-base font-bold text-blue-200 mt-2 text-center">
-                                      ⚠️ 不需上台領獎
-                                      {winner.checked_in === 2 ? '（公差無法到場）' : '（因公未到）'}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
+                              )}
                             </div>
                           );
                         })}
@@ -2107,7 +1913,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                       />
                       <button
                         onClick={async () => {
-                          if (batchWinners.length === 0 || isDrawing || !currentPrize || isRedrawDisabled) return;
+                          if (batchWinners.length === 0 || isDrawing || !currentPrize) return;
                           
                           setIsDrawing(true);
                           setBatchWinners([]);
@@ -2181,10 +1987,6 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                               }, 3000);
                             }
                             
-                            // 進入抽獎結果畫面時，禁用重抽按鈕 5 秒
-                            setIsRedrawDisabled(true);
-                            setTimeout(() => setIsRedrawDisabled(false), 5000);
-                            
                             setIsDrawing(false);
                             
                             // 添加到待上傳隊列（不自動上傳，需在管理後台手動上傳）
@@ -2196,7 +1998,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                             setIsDrawing(false);
                           }
                         }}
-                        disabled={isDrawing || isRedrawDisabled}
+                        disabled={isDrawing}
                         className="px-7 py-2 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-500 hover:to-orange-600 text-white font-semibold text-lg rounded-lg transition shadow-md border border-orange-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         🔄 重抽
@@ -2219,118 +2021,6 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
           </button>
         )}
       </div>
-
-      {/* 臨時加碼彈窗 */}
-      {showTempPrizeModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-2xl p-8 max-w-md w-full border-2 border-green-500/50 shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-3xl font-bold text-white">⚡ 臨時加碼</h2>
-              <button
-                onClick={() => {
-                  setShowTempPrizeModal(false);
-                  setTempPrizeForm({ prize_title: '', prize_name: '', company: 'ALL', mode: 'single' });
-                }}
-                className="text-gray-400 hover:text-white text-2xl font-bold"
-              >
-                ×
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-white text-sm font-semibold mb-2">
-                  獎項標題 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={tempPrizeForm.prize_title}
-                  onChange={(e) => setTempPrizeForm({ ...tempPrizeForm, prize_title: e.target.value })}
-                  placeholder="例如：特別獎"
-                  className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 outline-none"
-                  autoFocus
-                />
-              </div>
-              
-              <div>
-                <label className="block text-white text-sm font-semibold mb-2">
-                  獎品名稱 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={tempPrizeForm.prize_name}
-                  onChange={(e) => setTempPrizeForm({ ...tempPrizeForm, prize_name: e.target.value })}
-                  placeholder="例如：現金 5000 元"
-                  className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 outline-none"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-white text-sm font-semibold mb-2">
-                  數量 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={tempPrizeForm.quantity}
-                  onChange={(e) => setTempPrizeForm({ ...tempPrizeForm, quantity: e.target.value })}
-                  placeholder="請輸入數量"
-                  className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 outline-none"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-white text-sm font-semibold mb-2">
-                  公司限制（選填）
-                </label>
-                <input
-                  type="text"
-                  value={tempPrizeForm.company}
-                  onChange={(e) => setTempPrizeForm({ ...tempPrizeForm, company: e.target.value })}
-                  placeholder="ALL 表示不限公司"
-                  className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 outline-none"
-                />
-                <p className="text-gray-400 text-xs mt-1">留空或輸入 ALL 表示所有公司都可抽</p>
-              </div>
-              
-              <div>
-                <label className="block text-white text-sm font-semibold mb-2">
-                  抽獎模式
-                </label>
-                <select
-                  value={tempPrizeForm.mode}
-                  onChange={(e) => setTempPrizeForm({ ...tempPrizeForm, mode: e.target.value })}
-                  className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 outline-none"
-                >
-                  <option value="batch">批次抽獎</option>
-                  <option value="single">單次抽獎</option>
-                </select>
-              </div>
-            </div>
-            
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={handleAddTempPrize}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white font-bold text-lg rounded-lg transition shadow-lg"
-              >
-                ✅ 立即添加
-              </button>
-              <button
-                onClick={() => {
-                  setShowTempPrizeModal(false);
-                }}
-                className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white font-bold rounded-lg transition"
-              >
-                取消
-              </button>
-            </div>
-            
-            <div className="mt-4 text-center text-gray-400 text-sm">
-              💡 提示：流水號會自動遞增，可隨時添加
-            </div>
-          </div>
-        </div>
-      )}
     </div>
     </>
   );

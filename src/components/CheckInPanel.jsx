@@ -19,7 +19,7 @@ export default function CheckInPanel({ onCheckInSuccess }) {
   const [success, setSuccess] = useState('');
 
   // 報到開關與截止判斷
-  const now = useMemo(() => new Date(), []);
+  const [now, setNow] = useState(new Date());
   const deadlineDate = useMemo(() => {
     if (!checkInSettings?.deadline) return null;
     const d = new Date(checkInSettings.deadline);
@@ -32,6 +32,15 @@ export default function CheckInPanel({ onCheckInSuccess }) {
     }
     return true;
   }, [checkInSettings, deadlineDate, now]);
+
+  // 每5秒更新一次當前時間，確保截止時間判斷的準確性
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 5000); // 每5秒更新一次
+
+    return () => clearInterval(timer);
+  }, []);
 
   // 獨立報到頁面若尚未載入資料，嘗試自動下載一次
   useEffect(() => {

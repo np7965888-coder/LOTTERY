@@ -243,9 +243,6 @@ function doPost(e) {
         case 'importParticipants':
           result = handleImportParticipants(requestData);
           break;
-        case 'appendPrize':
-          result = handleAppendPrize(requestData);
-          break;
         case 'updatePrize':
           result = handleUpdatePrize(requestData);
           break;
@@ -788,39 +785,6 @@ function handleImportParticipants(requestData) {
   }
   
   return { success: true, message: `已匯入 ${participants.length} 筆參與者資料` };
-}
-
-/**
- * 新增獎項
- * 用於臨時加碼和參加獎
- */
-function handleAppendPrize(requestData) {
-  const prizeData = {
-    prize_id: requestData.prize_id || '',
-    prize_title: requestData.prize_title || '',
-    prize_name: requestData.prize_name || '',
-    quantity: requestData.quantity !== undefined ? requestData.quantity : 0,
-    description: requestData.description || '',
-    order: requestData.order !== undefined ? requestData.order : 999,
-    mode: requestData.mode || 'single',
-    company: requestData.company || 'ALL'
-  };
-  
-  const sheet = getSheet(SHEET_PRIZES);
-  const headers = ['prize_id', 'prize_title', 'prize_name', 'quantity', 'description', 'order', 'mode', 'company'];
-  
-  // 取得下一列
-  const nextRow = sheet.getLastRow() + 1;
-  
-  // 寫入資料
-  const rowData = objectToRow(prizeData, headers);
-  sheet.getRange(nextRow, 1, 1, headers.length).setValues([rowData]);
-  
-  return { 
-    success: true, 
-    message: '獎項已新增',
-    prize_id: prizeData.prize_id
-  };
 }
 
 /**
