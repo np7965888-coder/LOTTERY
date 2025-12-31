@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { getParticipants, getPrizes, getWinners, checkIn as apiCheckIn, appendWinner, appendWinners, appendPrize } from '../services/api';
+import { appendCheckInToGist, fetchCheckInsFromGist } from '../services/gistCheckInApi';
 
 const DataContext = createContext(null);
 
@@ -290,9 +291,9 @@ export function DataProvider({ children }) {
     });
   }, [applyWinnersToParticipants]);
 
-  // 報到功能（高速接收層：先寫入本地快取，後台批次同步到 Google Sheet）
+  // 報到功能（寫入 GitHub Gist 作為中央存儲）
   const checkIn = useCallback(async (participantId) => {
-    // 檢查報到是否開放
+    // 檢查報到設定
     if (!checkInSettings?.enabled) {
       return {
         success: false,
@@ -312,55 +313,112 @@ export function DataProvider({ children }) {
       }
     }
 
-    // 先更新本地資料
+    // 查找參與者資料
     const participant = participants.find(p => String(p.id) === String(participantId));
     if (!participant) {
       throw new Error(`找不到工號「${participantId}」的參與者`);
     }
 
-    // 如果已經報到，直接返回
-    if (participant.checked_in === 1) {
+    try {
+      // 寫入 GitHub Gist（中央存儲）
+      console.log(`📝 報到: ${participantId} - 寫入 Gist`);
+      const result = await appendCheckInToGist(participantId, {
+        name: participant.name,
+        department: participant.department,
+        company: participant.company
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || '寫入 Gist 失敗');
+      }
+
+      console.log(`✅ 報到成功: ${participantId} - 已寫入 Gist`);
+
       return {
         success: true,
         name: participant.name,
-        message: '您已經報到過了',
-        alreadyCheckedIn: true
+        alreadyCheckedIn: result.alreadyCheckedIn,
+        message: result.alreadyCheckedIn ? '您已經報到過了' : '報到成功'
       };
-    }
 
-    const participantIdStr = String(participantId || '').trim();
-    const now = new Date().toISOString();
+    } catch (error) {
+      console.error(`❌ 報到失敗: ${participantId}`, error);
 
-    // 高速接收層：立即更新本地狀態（快速回應使用者）
-    updateParticipant(participantId, {
-      checked_in: 1,
-      checked_date: now
-    });
-
-    // 加入待上傳佇列（由後台批次同步到 Google Sheet）
-    if (participantIdStr) {
+      // 容錯：存入本地待上傳隊列
       setPendingCheckIns(prev => {
-        // 檢查是否已存在（避免重複）
-        const exists = prev.some(p => String(p.participantId) === participantIdStr);
-        if (exists) return prev;
-        
-        const updated = [...prev, { participantId: participantIdStr, timestamp: now }];
+        const updated = [...prev, {
+          participantId,
+          timestamp: new Date().toISOString(),
+          error: error.message
+        }];
         try {
           localStorage.setItem(STORAGE_KEYS.PENDING_CHECKINS, JSON.stringify(updated));
         } catch (err) {
-          console.error('❌ 保存待上傳報到記錄失敗:', err);
+          console.error('❌ 保存到本地隊列失敗:', err);
         }
         return updated;
       });
-    }
 
-    // 立即返回成功（不等待 Google Sheet 寫入）
-    return {
-      success: true,
-      name: participant.name,
-      message: '報到成功'
-    };
-  }, [participants, updateParticipant, checkInSettings]);
+      throw error; // 讓前端顯示錯誤訊息
+    }
+  }, [participants, checkInSettings]);
+
+  // 從 GitHub Gist 同步報到數據到本地
+  const syncCheckInsFromGist = useCallback(async () => {
+    try {
+      console.log('🔄 開始從 Gist 同步報到數據...');
+
+      const result = await fetchCheckInsFromGist();
+
+      if (!result.success) {
+        console.error('❌ 同步失敗:', result.error);
+        return { success: false, error: result.error };
+      }
+
+      const gistCheckIns = result.checkIns || [];
+      console.log(`📊 從 Gist 獲取到 ${gistCheckIns.length} 筆報到記錄`);
+
+      // 更新本地參與者的 checked_in 狀態
+      setParticipants(prev => {
+        const updated = prev.map(p => {
+          const checkInRecord = gistCheckIns.find(
+            c => String(c.participantId) === String(p.id)
+          );
+
+          if (checkInRecord) {
+            return {
+              ...p,
+              checked_in: 1,
+              checkin_time: checkInRecord.timestamp
+            };
+          }
+          return p;
+        });
+
+        // 保存到 localStorage
+        try {
+          localStorage.setItem(STORAGE_KEYS.PARTICIPANTS, JSON.stringify(updated));
+        } catch (err) {
+          console.error('❌ 保存參與者數據失敗:', err);
+        }
+
+        return updated;
+      });
+
+      const checkedInCount = gistCheckIns.length;
+      console.log(`✅ 同步完成: ${checkedInCount} 人已報到`);
+
+      return {
+        success: true,
+        count: checkedInCount,
+        lastUpdated: result.lastUpdated
+      };
+
+    } catch (error) {
+      console.error('❌ 同步報到數據時發生錯誤:', error);
+      return { success: false, error: error.message };
+    }
+  }, []);
 
   // 添加待上傳的中獎記錄（用於抽獎）
   const addPendingWinner = useCallback((winner) => {
@@ -692,6 +750,7 @@ export function DataProvider({ children }) {
     addWinner,
     addWinners,
     checkIn,
+    syncCheckInsFromGist,
     pendingCheckIns,
     pendingWinners,
     pendingPrizes,

@@ -188,21 +188,95 @@ VITE_GITHUB_TOKEN=ghp_xxxxxxxxxxxxxx
 
 **建議**：由於報到設定（開啟/關閉、截止時間）不含敏感資訊，使用 **Public Gist** 即可。
 
+## 📦 報到數據 Gist 設置（新增）
+
+### 創建報到數據 Gist
+
+除了報到設定 Gist 之外，還需要創建一個專門用於存儲報到數據的 Gist：
+
+1. 前往 https://gist.github.com/ 創建新 Gist
+2. 填寫內容：
+   - **文件名**：`checkin-data.json`
+   - **內容**：
+   ```json
+   {
+     "checkIns": [],
+     "lastUpdated": "",
+     "totalCount": 0
+   }
+   ```
+   - 選擇「Public」或「Secret」
+3. 創建後複製 Gist ID（從 URL 中）
+4. 在 `.env.local` 中添加：
+   ```
+   VITE_CHECKIN_GIST_ID=your_checkin_data_gist_id
+   ```
+5. 在 Vercel 環境變數中添加 `VITE_CHECKIN_GIST_ID`
+
+### 兩個 Gist 的區別
+
+系統使用兩個獨立的 Gist：
+
+| Gist | 用途 | 環境變數 | 檔案名稱 |
+|------|------|----------|----------|
+| **報到設定 Gist** | 存儲報到開關和截止時間 | `VITE_GIST_ID` | `checkin-settings.json` |
+| **報到數據 Gist** | 存儲所有用戶的報到記錄 | `VITE_CHECKIN_GIST_ID` | `checkin-data.json` |
+
+**注意**：
+- 兩個 Gist 可以使用相同的 GitHub Token
+- 兩個 Gist 都需要在 Vercel 環境變數中配置
+- 報到數據 Gist 會隨著用戶報到而增長
+
+### 報到數據 Gist 內容格式
+
+```json
+{
+  "checkIns": [
+    {
+      "participantId": "12345",
+      "name": "張三",
+      "department": "技術部",
+      "company": "TW",
+      "timestamp": "2025-12-31T10:30:00.000Z",
+      "checkInCount": 1
+    }
+  ],
+  "lastUpdated": "2025-12-31T10:30:00.000Z",
+  "totalCount": 1
+}
+```
+
+- `checkIns`: 報到記錄陣列
+- `lastUpdated`: 最後更新時間
+- `totalCount`: 總報到人數
+
+### 同步機制說明
+
+1. **用戶報到**：報到時直接寫入報到數據 Gist
+2. **管理員同步**：管理員電腦每 10 秒自動從 Gist 同步報到數據到本地
+3. **抽獎使用**：抽獎時使用本地已同步的報到數據
+4. **上傳 Google Sheet**：需要時可批次上傳到 Google Sheet 保存
+
 ## 📚 技術細節
 
-### 同步機制
+### 報到設定同步機制
 
 - **管理後台 → Gist**: 使用 `PATCH` 請求更新 Gist（需要 Token）
 - **Gist → 報到裝置**: 使用 `GET` 請求讀取 Gist（無需 Token）
 - **同步頻率**: 每 10 秒自動同步一次
 - **即時性**: 設定更新後，所有裝置在 10 秒內會自動獲取新設定
 
-### API 端點
+### 報到設定 API 端點
 
-- **讀取**: `https://api.github.com/gists/{GIST_ID}`
-- **更新**: `https://api.github.com/gists/{GIST_ID}` (PATCH)
+- **讀取**: `https://api.github.com/gists/{VITE_GIST_ID}`
+- **更新**: `https://api.github.com/gists/{VITE_GIST_ID}` (PATCH)
 
-### Gist 內容格式
+### 報到數據 API 端點
+
+- **讀取**: `https://api.github.com/gists/{VITE_CHECKIN_GIST_ID}`
+- **寫入**: `https://api.github.com/gists/{VITE_CHECKIN_GIST_ID}` (PATCH)
+
+### 報到設定 Gist 內容格式
 
 ```json
 {

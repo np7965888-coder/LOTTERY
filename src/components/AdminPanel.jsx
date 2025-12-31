@@ -23,7 +23,8 @@ export default function AdminPanel() {
     refreshPendingQueues,
     checkInSettings,
     updateCheckInSettings,
-    clearPendingWinners
+    clearPendingWinners,
+    syncCheckInsFromGist
   } = useData();
   
   const [activeTab, setActiveTab] = useState('participants');
@@ -36,6 +37,9 @@ export default function AdminPanel() {
   const [showClearPendingConfirm, setShowClearPendingConfirm] = useState(false);
   const [localCheckInEnabled, setLocalCheckInEnabled] = useState(checkInSettings?.enabled ?? true);
   const [localDeadline, setLocalDeadline] = useState(checkInSettings?.deadline || '');
+  const [syncingCheckIns, setSyncingCheckIns] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState(null);
+  const [syncCheckInCount, setSyncCheckInCount] = useState(0);
 
   // 當分頁/視窗回到焦點或 localStorage 改變時，同步待上傳佇列
   useEffect(() => {
@@ -55,6 +59,28 @@ export default function AdminPanel() {
     setLocalCheckInEnabled(checkInSettings?.enabled ?? true);
     setLocalDeadline(checkInSettings?.deadline || '');
   }, [checkInSettings]);
+
+  // 自動同步報到數據（每10秒）
+  useEffect(() => {
+    const syncFromGist = async () => {
+      if (syncingCheckIns) return; // 避免重複同步
+
+      const result = await syncCheckInsFromGist();
+      if (result.success) {
+        setLastSyncTime(new Date());
+        setSyncCheckInCount(result.count);
+        console.log(`🔄 自動同步完成: ${result.count} 人已報到`);
+      }
+    };
+
+    // 立即執行一次
+    syncFromGist();
+
+    // 每10秒自動同步
+    const interval = setInterval(syncFromGist, 10000);
+
+    return () => clearInterval(interval);
+  }, [syncCheckInsFromGist, syncingCheckIns]);
 
   // 手動上傳待上傳的報到記錄
   const handleUploadCheckIns = async () => {
@@ -147,6 +173,38 @@ export default function AdminPanel() {
     });
     setTimeout(() => setUploadMessage({ type: '', text: '' }), 5000);
     setShowClearPendingConfirm(false);
+  };
+
+  // 手動強制同步報到數據
+  const handleManualSyncCheckIns = async () => {
+    setSyncingCheckIns(true);
+    setUploadMessage({ type: 'info', text: '正在從 Gist 同步報到數據...' });
+
+    try {
+      const result = await syncCheckInsFromGist();
+
+      if (result.success) {
+        setLastSyncTime(new Date());
+        setSyncCheckInCount(result.count);
+        setUploadMessage({
+          type: 'success',
+          text: `✅ 同步完成！共 ${result.count} 人已報到`
+        });
+      } else {
+        setUploadMessage({
+          type: 'error',
+          text: '❌ 同步失敗：' + result.error
+        });
+      }
+    } catch (error) {
+      setUploadMessage({
+        type: 'error',
+        text: '❌ 同步失敗：' + error.message
+      });
+    } finally {
+      setSyncingCheckIns(false);
+      setTimeout(() => setUploadMessage({ type: '', text: '' }), 5000);
+    }
   };
 
   // 更新報到設定（本地 + GitHub Gist 同步）
@@ -460,6 +518,87 @@ export default function AdminPanel() {
               </div>
               <div className="text-xs text-gray-500 bg-blue-50 p-3 rounded">
                 <strong>注意：</strong>此設定儲存在本機瀏覽器，不會從 Google Sheet 讀取或覆蓋。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 報到數據同步 */}
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-bold mb-4">報到數據同步</h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 左側：同步控制 */}
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <button
+                  onClick={handleManualSyncCheckIns}
+                  disabled={syncingCheckIns}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:bg-gray-400"
+                >
+                  {syncingCheckIns ? '同步中...' : '🔄 立即同步報到數據'}
+                </button>
+              </div>
+
+              <div className="text-sm text-gray-600 space-y-2">
+                <p>
+                  <span className="font-medium">自動同步：</span>
+                  每 10 秒自動從 GitHub Gist 同步
+                </p>
+                <p>
+                  <span className="font-medium">上次同步：</span>
+                  {lastSyncTime ? lastSyncTime.toLocaleString('zh-TW') : '尚未同步'}
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
+                <p className="font-semibold mb-1">💡 同步說明：</p>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li>用戶報到時數據寫入 GitHub Gist</li>
+                  <li>管理員電腦每 10 秒自動同步</li>
+                  <li>抽獎時使用已同步的本地數據</li>
+                  <li>可隨時手動點擊按鈕強制同步</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* 右側：報到統計 */}
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">報到統計</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">總參與人數：</span>
+                    <span className="font-bold text-gray-900">{participants.length} 人</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">已報到：</span>
+                    <span className="font-bold text-green-600">
+                      {participants.filter(p => p.checked_in === 1).length} 人
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">未報到：</span>
+                    <span className="font-bold text-red-600">
+                      {participants.filter(p => p.checked_in === 0).length} 人
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">報到率：</span>
+                    <span className="font-bold text-blue-600">
+                      {participants.length > 0
+                        ? Math.round((participants.filter(p => p.checked_in === 1).length / participants.length) * 100)
+                        : 0}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
+                <p className="font-semibold">✅ 抽獎準備就緒</p>
+                <p className="text-xs mt-1">
+                  已同步 {participants.filter(p => p.checked_in === 1).length} 人的報到記錄，可以開始抽獎
+                </p>
               </div>
             </div>
           </div>
