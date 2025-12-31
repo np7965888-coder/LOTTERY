@@ -273,6 +273,8 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
       console.error('抽獎失敗:', error);
       alert('抽獎失敗: ' + error.message);
       setIsDrawing(false);
+      // 發生錯誤時也要設置 5 秒禁用
+      setTimeout(() => setIsRedrawDisabled(false), 5000);
     }
   };
 
@@ -1771,6 +1773,8 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                     <button
                       onClick={() => {
                         if (isRedrawDisabled) return;
+                        // 按下重抽按鈕時立即禁用（5秒計時器會在抽獎完成後設置）
+                        setIsRedrawDisabled(true);
                         drawTempPrizeFromResult();
                       }}
                       disabled={isDrawing || isRedrawDisabled}
@@ -1808,12 +1812,21 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
 
             {currentWinner && !isDrawing && (
               <div className="space-y-8 animate-fade-in">
+                {/* 部門 */}
+                <div className="text-3xl font-bold mb-2" style={{ color: '#FFFFFF', textShadow: '0 2px 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>
+                  部門: {currentWinner.department}
+                </div>
+                {/* 工號 */}
+                <div className="text-3xl font-bold mb-2" style={{ color: '#FFFFFF', textShadow: '0 2px 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>
+                  工號: {currentWinner.id}
+                </div>
                 {/* 根據 checked_in 狀態顯示不同顏色 */}
                 {currentWinner.checked_in === 2 || currentWinner.checked_in === 9 ? (
                   <>
                     <div
-                      className={`rounded-lg winner-name ${isSinglePrize ? 'gold-border-pulse' : ''}`}
+                      className={`text-7xl font-bold mb-6 drop-shadow-lg rounded-lg p-8 winner-name ${isSinglePrize ? 'gold-border-pulse' : ''}`}
                       style={{
+                        color: '#FFFFFF',
                         border: isSinglePrize 
                           ? `4px solid ${getGoldBorderColor(goldBorderProgress)}`
                           : '4px solid rgba(255, 255, 255, 0.25)',
@@ -1824,27 +1837,10 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                           0 0 35px rgba(59, 130, 246, 0.4),
                           0 8px 32px rgba(0, 0, 0, 0.6)
                         `,
+                        textShadow: '0 4px 16px rgba(0, 0, 0, 0.8)',
                       }}
                     >
-                      <div className="flex items-center">
-                        {/* 左半邊：部門工號 */}
-                        <div className="w-1/3 flex flex-col justify-center items-center px-8 py-12 border-r-4 border-gray-400/30">
-                          <div className="text-2xl font-bold text-gray-300 mb-3" style={{ textShadow: '0 2px 8px rgba(0, 0, 0, 0.8)' }}>部門</div>
-                          <div className="text-4xl font-black text-white mb-8" style={{ textShadow: '0 2px 12px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>{currentWinner.department}</div>
-                          <div className="text-2xl font-bold text-gray-300 mb-3" style={{ textShadow: '0 2px 8px rgba(0, 0, 0, 0.8)' }}>工號</div>
-                          <div className="text-4xl font-black text-white" style={{ textShadow: '0 2px 12px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>{currentWinner.id}</div>
-                        </div>
-                        {/* 右半邊：姓名 */}
-                        <div className="flex-1 flex flex-col justify-center items-center px-12 py-12">
-                          <div className="font-black mb-4 drop-shadow-lg" style={{
-                            color: '#FFFFFF',
-                            fontSize: '10rem',
-                            textShadow: '0 4px 20px rgba(0, 0, 0, 0.9), 0 0 30px rgba(255, 255, 255, 0.4)'
-                          }}>
-                            {formatWinnerName(currentWinner.name, currentWinner.company)}
-                          </div>
-                        </div>
-                      </div>
+                      {formatWinnerName(currentWinner.name, currentWinner.company)}
                     </div>
                     <div
                       className="text-2xl font-bold text-blue-200 mb-4 rounded-lg p-4 border"
@@ -1863,8 +1859,9 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                   </>
                 ) : (
                   <div 
-                    className={`rounded-lg winner-name ${isSinglePrize ? 'gold-border-pulse' : ''}`}
+                    className={`text-7xl font-bold mb-6 rounded-lg p-8 winner-name ${isSinglePrize ? 'gold-border-pulse' : ''}`}
                     style={{
+                      color: '#FFFFFF',
                       background: isSinglePrize 
                         ? `linear-gradient(135deg, rgba(${Math.round(26 + (251 - 26) * goldBorderProgress)}, ${Math.round(26 + (192 - 26) * goldBorderProgress)}, ${Math.round(26 + (45 - 26) * goldBorderProgress)}, ${0.1 + goldBorderProgress * 0.15}), rgba(${Math.round(26 + (255 - 26) * goldBorderProgress)}, ${Math.round(215 - 26) * goldBorderProgress}, ${Math.round(0 - 26) * goldBorderProgress}, ${0.05 + goldBorderProgress * 0.1})}`
                         : 'linear-gradient(135deg, rgba(251, 192, 45, 0.18), rgba(255, 215, 0, 0.12))',
@@ -1877,28 +1874,11 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                         inset 0 0 25px rgba(251, 192, 45, 0.2),
                         0 8px 32px rgba(0, 0, 0, 0.6)
                       `,
+                      textShadow: '0 4px 16px rgba(0, 0, 0, 0.8)',
                       filter: 'drop-shadow(0 0 12px rgba(251, 192, 45, 0.6))',
                     }}
                   >
-                    <div className="flex items-center">
-                      {/* 左半邊：部門工號 */}
-                      <div className="w-1/3 flex flex-col justify-center items-center px-8 py-12 border-r-4 border-yellow-400/30">
-                        <div className="text-2xl font-bold text-gray-300 mb-3" style={{ textShadow: '0 2px 8px rgba(0, 0, 0, 0.8)' }}>部門</div>
-                        <div className="text-4xl font-black text-white mb-8" style={{ textShadow: '0 2px 12px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>{currentWinner.department}</div>
-                        <div className="text-2xl font-bold text-gray-300 mb-3" style={{ textShadow: '0 2px 8px rgba(0, 0, 0, 0.8)' }}>工號</div>
-                        <div className="text-4xl font-black text-white" style={{ textShadow: '0 2px 12px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>{currentWinner.id}</div>
-                      </div>
-                      {/* 右半邊：姓名 */}
-                      <div className="flex-1 flex flex-col justify-center items-center px-12 py-12">
-                        <div className="font-black mb-4 drop-shadow-lg" style={{
-                          color: '#FFFFFF',
-                          fontSize: '10rem',
-                          textShadow: '0 4px 20px rgba(0, 0, 0, 0.9), 0 0 30px rgba(255, 255, 255, 0.4)'
-                        }}>
-                          {formatWinnerName(currentWinner.name, currentWinner.company)}
-                        </div>
-                      </div>
-                    </div>
+                    {formatWinnerName(currentWinner.name, currentWinner.company)}
                   </div>
                 )}
                 <div className="text-3xl font-bold mb-2" style={{ color: '#FFFFFF', textShadow: '0 2px 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.3)' }}>
@@ -1907,7 +1887,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                 <div className="text-2xl font-semibold mb-8" style={{ color: '#F0F0F0', textShadow: '0 2px 6px rgba(0, 0, 0, 0.7), 0 0 12px rgba(255, 255, 255, 0.2)' }}>
                   {currentPrize?.prize_name}
                 </div>
-                <div className="mt-8 flex flex-col items-center gap-6 w-full">
+                <div className="mt-8 flex flex-row items-center justify-center gap-6 w-full flex-wrap">
                   {/* 主要操作：继续抽奖 */}
                   <button
                     onClick={() => {
@@ -1941,6 +1921,9 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                       onClick={async () => {
                         if (!currentWinner || isDrawing || isRedrawDisabled) return;
                         
+                        // 按下重抽按鈕時立即禁用
+                        setIsRedrawDisabled(true);
+                        
                         const count = Math.max(1, Math.min(10, redrawCount));
                         
                         // 清除當前顯示，保留中獎記錄
@@ -1961,6 +1944,8 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                           console.error('重抽失敗:', error);
                           alert('重抽失敗: ' + error.message);
                           setIsDrawing(false);
+                          // 發生錯誤時也要設置 5 秒禁用
+                          setTimeout(() => setIsRedrawDisabled(false), 5000);
                         }
                       }}
                       disabled={isDrawing || isRedrawDisabled}
@@ -1999,7 +1984,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                   </div>
                   
                   {/* 中獎者列表 - 帶有分頁控制 */}
-                  <div className="flex items-center justify-between gap-6 flex-1 min-h-0">
+                  <div className="flex items-center justify-between gap-6 flex-1 min-h-0 overflow-hidden">
                     <button
                       onClick={goToPreviousPage}
                       className="w-20 h-20 flex items-center justify-center bg-gray-800/60 hover:bg-gray-700/80 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 border border-gray-600/50"
@@ -2011,8 +1996,8 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                       </svg>
                     </button>
                     
-                    <div className="flex-1 h-full flex flex-col min-h-0">
-                      <div className="flex flex-wrap justify-center gap-6 flex-1 min-h-0 content-start">
+                    <div className="flex-1 h-full flex flex-col min-h-0 overflow-hidden">
+                      <div className="flex flex-wrap justify-center gap-4 content-start overflow-y-auto h-full px-4 py-2">
                         {currentPageWinners.map((winner, idx) => {
                           const actualIndex = startIndex + idx;
                           // 根據 checked_in 狀態決定樣式
@@ -2025,27 +2010,41 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                                   ? 'bg-gray-700/60 border-gray-600/50 text-white' 
                                   : 'bg-blue-900/60 border-blue-500/60 text-blue-200'
                               }`}
-                              style={{ width: 'calc(50% - 12px)', minWidth: '500px', maxWidth: '700px' }}
+                              style={{ 
+                                width: 'calc(50% - 16px)', 
+                                minWidth: '380px', 
+                                maxWidth: '600px',
+                                height: 'auto',
+                                minHeight: '160px',
+                                maxHeight: '240px'
+                              }}
                             >
                               <div className="flex items-center h-full">
                                 {/* 左半邊：部門工號 */}
-                                <div className="w-1/3 flex flex-col justify-center items-center px-4 py-6 border-r border-gray-500/40">
-                                  <div className="text-lg text-gray-300 mb-2 text-center">部門</div>
-                                  <div className="text-xl font-semibold text-blue-200 mb-4 text-center">{winner.department}</div>
-                                  <div className="text-lg text-gray-300 mb-2 text-center">工號</div>
-                                  <div className="text-xl font-semibold text-blue-200 text-center">{winner.id}</div>
+                                <div className="w-1/3 flex flex-col justify-center items-center px-3 py-4 border-r border-gray-500/40">
+                                  <div className="text-base text-gray-300 mb-1 text-center">部門</div>
+                                  <div className="text-lg font-semibold text-blue-200 mb-3 text-center break-words max-w-full">{winner.department}</div>
+                                  <div className="text-base text-gray-300 mb-1 text-center">工號</div>
+                                  <div className="text-lg font-semibold text-blue-200 text-center">{winner.id}</div>
                                 </div>
                                 {/* 右半邊：姓名 */}
-                                <div className="flex-1 flex flex-col justify-center items-center px-6 py-6">
-                                  <div className="font-black mb-2 drop-shadow-lg" style={{
+                                <div className="flex-1 flex flex-col justify-center items-center px-3 py-3 overflow-hidden">
+                                  <div className="font-black drop-shadow-lg text-center break-words w-full" style={{
                                     color: '#FFFFFF',
-                                    fontSize: '4.5rem',
-                                    textShadow: '0 4px 12px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.3)'
+                                    fontSize: 'clamp(2rem, 4vw, 3rem)',
+                                    lineHeight: '1.2',
+                                    textShadow: '0 4px 12px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.3)',
+                                    wordBreak: 'break-word',
+                                    overflowWrap: 'break-word',
+                                    maxHeight: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
                                   }}>
                                     {formatWinnerName(winner.name, winner.company)}
                                   </div>
                                   {isAbsent && (
-                                    <div className="text-base font-bold text-blue-200 mt-2 text-center">
+                                    <div className="text-sm font-bold text-blue-200 mt-1 text-center">
                                       ⚠️ 不需上台領獎
                                       {winner.checked_in === 2 ? '（公差無法到場）' : '（因公未到）'}
                                     </div>
@@ -2075,7 +2074,7 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                     </button>
                   </div>
                   
-                  <div className="mt-2 flex flex-col items-center gap-5 w-full flex-shrink-0">
+                  <div className="mt-2 flex flex-row items-center justify-center gap-5 w-full flex-shrink-0 flex-wrap">
                     {/* 主要操作：继续抽奖 */}
                     <button
                       onClick={() => {
@@ -2108,6 +2107,9 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                       <button
                         onClick={async () => {
                           if (batchWinners.length === 0 || isDrawing || !currentPrize || isRedrawDisabled) return;
+                          
+                          // 按下重抽按鈕時立即禁用
+                          setIsRedrawDisabled(true);
                           
                           setIsDrawing(true);
                           setBatchWinners([]);
@@ -2194,6 +2196,8 @@ export default function DrawScreen({ isFullscreen = false, onExitFullscreen }) {
                             console.error('重抽失敗:', error);
                             alert('重抽失敗: ' + error.message);
                             setIsDrawing(false);
+                            // 發生錯誤時也要設置 5 秒禁用
+                            setTimeout(() => setIsRedrawDisabled(false), 5000);
                           }
                         }}
                         disabled={isDrawing || isRedrawDisabled}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useData } from '../contexts/DataContext';
+import { fetchCheckInSettings } from '../services/checkInSettingsApi';
 
 // 格式化中獎者姓名顯示（非 TW 公司顯示「姓名(公司)」）
 const formatWinnerName = (name, company) => {
@@ -11,12 +12,33 @@ const formatWinnerName = (name, company) => {
 
 export default function CheckInPanel({ onCheckInSuccess }) {
   // 使用全局資料
-  const { winners, prizes, checkIn: checkInWithContext, dataLoaded, participants, loadAllData, loading: globalLoading, checkInSettings } = useData();
+  const { winners, prizes, checkIn: checkInWithContext, dataLoaded, participants, loadAllData, loading: globalLoading, checkInSettings, updateCheckInSettings } = useData();
   
   const [participantId, setParticipantId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // 從服務器定期獲取報到設置（每 10 秒一次）
+  useEffect(() => {
+    // 立即獲取一次
+    const syncSettings = async () => {
+      const result = await fetchCheckInSettings();
+      if (result.success) {
+        updateCheckInSettings(result.settings);
+        console.log('✅ 已從服務器同步報到設置:', result.settings);
+      } else {
+        console.warn('⚠️ 從服務器同步報到設置失敗，使用本地設置');
+      }
+    };
+    
+    syncSettings();
+    
+    // 每 10 秒自動同步一次
+    const interval = setInterval(syncSettings, 10000);
+    
+    return () => clearInterval(interval);
+  }, [updateCheckInSettings]);
 
   // 報到開關與截止判斷
   const [now, setNow] = useState(new Date());
@@ -37,10 +59,18 @@ export default function CheckInPanel({ onCheckInSuccess }) {
   useEffect(() => {
     const timer = setInterval(() => {
       setNow(new Date());
+      
+      // 同時重新從 context 讀取最新的 checkInSettings
+      // 這樣如果有其他窗口或設備更新了設置，這裡也能即時反應
+      console.log('⏰ 更新當前時間並檢查報到設置:', {
+        enabled: checkInSettings?.enabled,
+        deadline: checkInSettings?.deadline,
+        now: new Date().toISOString()
+      });
     }, 5000); // 每5秒更新一次
 
     return () => clearInterval(timer);
-  }, []);
+  }, [checkInSettings]);
 
   // 獨立報到頁面若尚未載入資料，嘗試自動下載一次
   useEffect(() => {
@@ -172,8 +202,13 @@ export default function CheckInPanel({ onCheckInSuccess }) {
                 <p className="text-sm text-yellow-700">
                   {!dataLoaded
                     ? '資料尚未載入：請先在管理後台頁面下載資料後再進行報到。'
-                    : '報到已暫停或已逾截止時間，請洽工作人員。'}
+                    : `報到已暫停或已逾截止時間。${checkInSettings?.deadline ? `（截止時間：${new Date(checkInSettings.deadline).toLocaleString('zh-TW')}）` : ''}`}
                 </p>
+                {!isCheckInOpen && checkInSettings?.deadline && (
+                  <p className="text-xs text-yellow-600 mt-2">
+                    報到設定每 10 秒自動從服務器更新。如有問題請聯繫工作人員。
+                  </p>
+                )}
               </div>
             </div>
           </div>

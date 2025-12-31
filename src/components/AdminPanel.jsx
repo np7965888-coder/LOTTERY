@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { importParticipants, updatePrize } from '../services/api';
 import { useData } from '../contexts/DataContext';
 import TestProbability from './TestProbability';
+import { updateCheckInSettings as updateServerSettings } from '../services/checkInSettingsApi';
 
 export default function AdminPanel() {
   // 使用全局資料
@@ -149,13 +150,29 @@ export default function AdminPanel() {
   };
 
   // 更新報到設定（本地存儲，不讀取 Google Sheet）
-  const handleSaveCheckInSettings = () => {
-    updateCheckInSettings({
+  const handleSaveCheckInSettings = async () => {
+    const settings = {
       enabled: !!localCheckInEnabled,
       deadline: localDeadline
-    });
-    setUploadMessage({ type: 'success', text: '已更新報到設定（本地）' });
-    setTimeout(() => setUploadMessage({ type: '', text: '' }), 4000);
+    };
+    
+    setUploadMessage({ type: 'info', text: '正在同步報到設定到服務器...' });
+    
+    try {
+      // 同時更新本地和服務器
+      updateCheckInSettings(settings);
+      const result = await updateServerSettings(settings);
+      
+      if (result.success) {
+        setUploadMessage({ type: 'success', text: '✅ 已更新報到設定並同步到服務器（所有設備將在 10 秒內自動更新）' });
+      } else {
+        setUploadMessage({ type: 'warning', text: `⚠️ 本地設定已更新，但服務器同步失敗: ${result.error}` });
+      }
+    } catch (error) {
+      setUploadMessage({ type: 'warning', text: `⚠️ 本地設定已更新，但服務器同步失敗: ${error.message}` });
+    }
+    
+    setTimeout(() => setUploadMessage({ type: '', text: '' }), 6000);
   };
 
   const handleResetCheckInSettings = () => {
@@ -353,9 +370,9 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* 報到設定（本地控制，不從 Google Sheet 讀取） */}
+        {/* 報到設定（同步到服務器） */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4">報到設定（本地）</h2>
+          <h2 className="text-xl font-bold mb-4">報到設定（全局同步）</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* 左側：設定區域 */}
             <div className="flex flex-col gap-4">
@@ -431,7 +448,34 @@ export default function AdminPanel() {
                 </div>
               </div>
               <div className="text-xs text-gray-500 bg-blue-50 p-3 rounded">
-                <strong>注意：</strong>此設定儲存在本機瀏覽器，不會從 Google Sheet 讀取或覆蓋。
+                <strong>💡 工作原理：</strong>
+                <ul className="mt-2 space-y-1 list-disc list-inside">
+                  <li>點擊「保存設定」後，設定會同步到服務器</li>
+                  <li>所有報到頁面每 10 秒自動從服務器獲取最新設定</li>
+                  <li>無需重新整理頁面，設定會自動更新</li>
+                </ul>
+              </div>
+              
+              {/* 報到連結 */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-3">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">📱 報到頁面連結</h3>
+                <p className="text-xs text-gray-600 mb-3">
+                  可以提前分享此連結，報到設定會自動同步到所有設備
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const checkInUrl = `${window.location.origin}${window.location.pathname}#/checkin`;
+                    navigator.clipboard.writeText(checkInUrl).then(() => {
+                      alert('✅ 已複製報到頁面連結！\n\n此連結可以提前分享給報到設備。\n當您設定截止時間後，所有設備會在 10 秒內自動更新。');
+                    }).catch(() => {
+                      prompt('請複製以下報到連結：', checkInUrl);
+                    });
+                  }}
+                  className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg transition text-sm"
+                >
+                  📋 複製報到連結
+                </button>
               </div>
             </div>
           </div>
